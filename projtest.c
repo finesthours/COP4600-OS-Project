@@ -11,7 +11,10 @@
 
 int  get_agent_id( char* );
 int  get_event_id( char* );
-//~ void Add_Event( int event, int agent, struct time_type* time );
+void Add_Event( int event, int agent, struct time_type* time );
+void Uint_to_time( unsigned long ul_time, struct time_type* sim_time );
+int  Compare_time( struct time_type *time_1, struct time_type *time_2 );
+
 // Names of events
 char* Event_Names[] =
 	{ "LOGON", "SIO", "WIO", "EIO", "END", "TIMER", "SEGFAULT", "ADRFAULT" };
@@ -37,8 +40,14 @@ char* Event_Names[] =
 int main(void)
 {
 	FILE *fp;
+	time_type sim_time = {0,0};
+
 	int c=0, timeIn, eventId, agentId;
 	char str[128], *eventListToken, *eventName, *agentName, *timeInString;
+	
+	//~ time_type *sim_time = {0,0};
+	//~ sim_time->seconds = 0;
+	//~ sim_time->nanosec = 0;
 
 	//Open logon file given by constant LOGON_FILENAME
 	if((fp = fopen(LOGON_FILENAME, "r")) == NULL)
@@ -72,15 +81,20 @@ int main(void)
 		//~ }
 		agentId = get_agent_id( agentName );
 		
+		//Convert time to simulation time--call Uint_to_time()
 		eventListToken = strtok('\0', ", ");
 		timeInString = eventListToken;
 		timeIn = atoi(timeInString);
+		Uint_to_time(timeIn, &sim_time);
+		
+		
 		printf ("Line %d tokens: %s, %s, %d\n", c, eventName, agentName, timeIn);
 		printf ("Line %d ids: %d, %d\n", c, eventId, agentId);
+		printf ("Line %d time: %lu, %lu\n", c, sim_time.seconds, sim_time.nanosec);
 		c++; 
 		
 		//Add event to event list using event ID, agent ID, and simulation time
-		//~ Add_Event(eventId, agentId, timeIn);
+		//~ Add_Event(eventId, agentId, &sim_time);
 	}
 
 	fclose(fp);
@@ -230,7 +244,69 @@ get_agent_id( char* agent_name )
 	@param[in] time -- time event occurs
 	@retval None
  */
-//~ void
-//~ Add_Event( int event, int agent, struct time_type* time )
-//~ {
-//~ }
+void
+Add_Event( int event, int agent, struct time_type* time )
+{
+	
+}
+
+void
+Uint_to_time( unsigned long ul_time, struct time_type* sim_time )
+{
+	//~ switch( Time_Unit )
+	//~ {
+		//~ case MIN:
+			//~ sim_time->seconds = ul_time * 60;
+			//~ sim_time->nanosec = 0;
+			//~ break;
+		//~ case SEC:
+			sim_time->seconds = ul_time;
+			sim_time->nanosec = 0;
+			//~ break;
+		//~ case MSEC:
+			//~ sim_time->seconds = ul_time / 1000;
+			//~ sim_time->nanosec = (ul_time - 1000 * sim_time->seconds) * MSEC;
+			//~ break;
+		//~ case mSEC:
+			//~ sim_time->seconds = ul_time / 1000000;
+			//~ sim_time->nanosec = (ul_time - 1000000 * sim_time->seconds) * mSEC;
+			//~ break;
+		//~ case NSEC:
+			//~ sim_time->seconds = ul_time / 1000000000;
+			//~ sim_time->nanosec = ul_time - 1000000000 * sim_time->seconds;
+			//~ break;
+		//~ default:
+			//~ break;
+	//~ }
+}
+
+/**
+	Compare two simulation times: time_1 < time_2.
+
+	@param[in] time_1 -- time to use in comparision
+	@param[in] time_2 -- time to use in comparision
+	@retval Either -1, 0, or +1 depending on if time_1 is respectively less
+	than, equal to, or greater than time_2.
+ */
+int
+Compare_time( struct time_type *time_1, struct time_type *time_2 )
+{
+	int result;
+
+	// compare seconds
+	result = ( time_1->seconds < time_2->seconds ) ? -1 : 1;
+
+	// if seconds are equal, then compare nano-seconds
+	if( time_1->seconds == time_2->seconds )
+	{
+		result = ( time_1->nanosec < time_2->nanosec ) ? -1 : 1;
+
+		// if nanoseconds are also equal, then time_1 and time_2 are equal
+		if( time_1->nanosec == time_2->nanosec )
+		{
+			result = 0;
+		}
+	}
+
+	return( result );
+}
