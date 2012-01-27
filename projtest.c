@@ -14,6 +14,8 @@ int  get_event_id( char* );
 void Add_Event( int event, int agent, struct time_type* time );
 void Uint_to_time( unsigned long ul_time, struct time_type* sim_time );
 int  Compare_time( struct time_type *time_1, struct time_type *time_2 );
+event_list*   Event_List = NULL;  // pointer to head of event list
+int  Num_Terminals    =  0;   // Number of terminals
 
 // Names of events
 char* Event_Names[] =
@@ -95,8 +97,14 @@ int main(void)
 		
 		//Add event to event list using event ID, agent ID, and simulation time
 		//~ Add_Event(eventId, agentId, &sim_time);
+		Write_Event(eventId, agentId, &sim_time);
 	}
-
+	
+	//~ while(Event_List)
+	//~ {
+		//~ printf("struct order:\n\t%d, %d, %lu, %lu\n", Event_List->event, Event_List->agent,  Event_List->time.seconds, Event_List->time.nanosec);
+		//~ Event_List = Event_List->next;
+	//~ }
 	fclose(fp);
 	return 0;
 }
@@ -207,14 +215,14 @@ get_agent_id( char* agent_name )
 				//If they are equal
 				if(strcmp(agent_name, "DISK"/*Dev_Table[agentNum] == NULL!!!*/) == 0)
 				{
-					agentId = agentNum;
+					//Return agent ID + Num_Terminals + 1 since device agent IDs follow user agent IDs
+					agentId = agentNum + Num_Terminals +1;
 					break;
 				}
 			}
 		}
 	}
 	
-	//~ printf("agentName = %s\n", agent_name);
 	// return agentId
 	return( agentId );
 }
@@ -247,7 +255,120 @@ get_agent_id( char* agent_name )
 void
 Add_Event( int event, int agent, struct time_type* time )
 {
+	//Allocate a new event node
+	event_list *new_node, *tempNode;
+	new_node = (event_list *) malloc(sizeof(event_list));
+	tempNode = (event_list *) malloc(sizeof(event_list));
+	if(!new_node || !tempNode)
+	{
+		printf("\nno more memory");
+		return;
+	}
 	
+	//Set the new event node's fields to the event, agent, and time passed in
+	new_node->event = event;
+	new_node->agent = agent;
+	new_node->time = *time;
+	printf("struct contents: %d, %d, %lu\n", new_node->event, new_node->agent,  new_node->time.seconds);
+	
+	//If the event list is empty
+	if(Event_List == NULL)
+	{
+		//Set the event list header node to the new event node
+		Event_List = new_node;
+		Event_List->next = NULL;
+		Event_List->prev = NULL;
+	}
+
+	//Else, if the new event node should precede the event list header node
+	else if(Compare_time(&new_node->time, &Event_List->time) < 0)
+	{
+		//Place the new node at the start of the list
+		tempNode = Event_List;
+		Event_List = new_node;
+		Event_List->next = tempNode;
+		Event_List->prev = NULL;
+	}
+	//Otherwise, the new node goes in the middle or at the end of the list
+	else
+	{
+		//Traverse the event list 
+		while(Event_List->next != NULL)
+		{
+			//until reaching the node that should precede the new node
+			if(Compare_time(&new_node->time, &Event_List->time) < 0)
+			{
+				//Add the new node after the node reached in the traversal
+				tempNode = Event_List;
+				Event_List = new_node;
+				tempNode->prev->next = Event_List;
+				tempNode->next->prev = Event_List;
+				Event_List->next = tempNode->next;
+				Event_List->prev = tempNode->prev;
+
+				break;
+			}
+			Event_List = Event_List->next;
+		}
+		//--handle special case of new node being at the end of the list
+		Event_List->next = new_node;
+		new_node->next = NULL;
+		new_node->prev = Event_List;
+	}
+	
+	//~ while(Event_List)
+	//~ {
+		//~ printf("struct order:\n\t%d, %d, %lu, %lu\n", Event_List->event, Event_List->agent,  Event_List->time.seconds, Event_List->time.nanosec);
+		//~ Event_List = Event_List->next;
+	//~ }
+	free(tempNode);
+	free(new_node);
+}
+
+/**
+	Write an event to the output file.
+	
+	Call print_out() for all output to file. The format of the output is:
+	"  EVENT  AGENT  TIME (HR:xxxxxxxx MN:xx SC:xx MS:xxx mS:xxx NS:xxx )"
+
+	<b> Algorithm: </b>
+	\verbatim
+	Convert the seconds field of time_type to hours, minutes, and seconds
+	Convert the nanoseconds field to milliseconds, microseconds and nanoseconds
+	Determine type of agent--user terminal or device:
+		If agent ID <= Num_Terminals, then agent is user terminal:
+			Agent name is of the form 'U0#' where # = agent ID
+		Otherwise, agent is a device:
+			Agent name is stored in Dev_Table[ agent - Num_Terminals - 1]
+	Print formatted message using event name from Event_Names, agent name, and event times--use print_out()
+	\endverbatim 
+
+	@param[in] event -- event
+	@param[in] agent -- agent
+	@param[in] time -- time
+	@retval None
+ */
+void
+Write_Event( int event, int agent, struct time_type *time )
+{
+	unsigned long seconds = time->seconds, minutes = 0, hours = 0;
+	unsigned long milliseconds = 0, microseconds = 0, nanoseconds = time->nanosec;
+	
+	//Convert the seconds field of time_type to hours, minutes, and seconds
+	hours = seconds/3600;
+	seconds = seconds - hours*3600;
+	minutes = seconds/60;
+	seconds = seconds - minutes*60;
+	
+	printf("hours = %lu\nminutes = %lu\nseconds = %lu\n", hours, minutes, seconds);
+	
+	//Convert the nanoseconds field to milliseconds, microseconds and nanoseconds
+	milliseconds = nanoseconds/1000000;
+	nanoseconds = nanoseconds - milliseconds*1000000;
+	microseconds = nanoseconds/1000;
+	nanoseconds = nanoseconds - microseconds*1000;
+	
+	printf("milliseconds = %lu\nmicroseconds = %lu\nnanoseconds = %lu\n", milliseconds, microseconds, nanoseconds);
 }
 
 void
