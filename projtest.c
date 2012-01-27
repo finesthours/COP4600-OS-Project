@@ -15,7 +15,7 @@ void Add_Event( int event, int agent, struct time_type* time );
 void Uint_to_time( unsigned long ul_time, struct time_type* sim_time );
 int  Compare_time( struct time_type *time_1, struct time_type *time_2 );
 event_list*   Event_List = NULL;  // pointer to head of event list
-int  Num_Terminals    =  0;   // Number of terminals
+int  Num_Terminals    =  6;   // Number of terminals
 
 // Names of events
 char* Event_Names[] =
@@ -90,9 +90,9 @@ int main(void)
 		Uint_to_time(timeIn, &sim_time);
 		
 		
-		printf ("Line %d tokens: %s, %s, %d\n", c, eventName, agentName, timeIn);
-		printf ("Line %d ids: %d, %d\n", c, eventId, agentId);
-		printf ("Line %d time: %lu, %lu\n", c, sim_time.seconds, sim_time.nanosec);
+		printf ("Line %d tokens: %s, %s, %d \t ", c, eventName, agentName, timeIn);
+		printf ("ids: %d, %d\n", eventId, agentId);
+		//~ printf ("Line %d time: %lu, %lu\n", c, sim_time.seconds, sim_time.nanosec);
 		c++; 
 		
 		//Add event to event list using event ID, agent ID, and simulation time
@@ -353,6 +353,9 @@ Write_Event( int event, int agent, struct time_type *time )
 {
 	unsigned long seconds = time->seconds, minutes = 0, hours = 0;
 	unsigned long milliseconds = 0, microseconds = 0, nanoseconds = time->nanosec;
+	char agentId[3];
+	char agentName[5] = "U";
+	char *agentDev;
 	
 	//Convert the seconds field of time_type to hours, minutes, and seconds
 	hours = seconds/3600;
@@ -360,7 +363,7 @@ Write_Event( int event, int agent, struct time_type *time )
 	minutes = seconds/60;
 	seconds = seconds - minutes*60;
 	
-	printf("hours = %lu\nminutes = %lu\nseconds = %lu\n", hours, minutes, seconds);
+	//~ printf("hours = %lu\nminutes = %lu\nseconds = %lu\n", hours, minutes, seconds);
 	
 	//Convert the nanoseconds field to milliseconds, microseconds and nanoseconds
 	milliseconds = nanoseconds/1000000;
@@ -368,7 +371,37 @@ Write_Event( int event, int agent, struct time_type *time )
 	microseconds = nanoseconds/1000;
 	nanoseconds = nanoseconds - microseconds*1000;
 	
-	printf("milliseconds = %lu\nmicroseconds = %lu\nnanoseconds = %lu\n", milliseconds, microseconds, nanoseconds);
+	//~ printf("milliseconds = %lu\nmicroseconds = %lu\nnanoseconds = %lu\n", milliseconds, microseconds, nanoseconds);
+	
+	//Determine type of agent--user terminal or device:
+	//If agent ID <= Num_Terminals, then agent is user terminal:
+	if(agent <= Num_Terminals)
+	{
+		//Agent name is of the form 'U0#' where # = agent ID
+		if(agent < 10)
+			sprintf(agentId, "00%d", agent);
+		else if (agent > 10 && agent < 100)
+			sprintf(agentId, "0%d", agent);
+		else
+			sprintf(agentId, "%d", agent);
+			
+		strcat(agentName,agentId);
+		
+		//Print formatted message using event name from Event_Names, agent name, and event times--use print_out()
+		//~ print_out("  %s  %s  HR:%lu MN:%lu SC:%lu MS:%lu mS:%lu NS:%lu\n", Event_Names[event], agentName, hours, minutes, seconds, milliseconds, microseconds, nanoseconds);
+		printf("  %s  %s  HR:%lu MN:%lu SC:%lu MS:%lu mS:%lu NS:%lu\n", Event_Names[event], agentName, hours, minutes, seconds, milliseconds, microseconds, nanoseconds);
+	}
+	
+	//Otherwise, agent is a device:
+	else
+	{
+		//Agent name is stored in Dev_Table[ agent - Num_Terminals - 1]
+		agentDev = "DISK";//Dev_Table[ agent - Num_Terminals - 1] == NULL !!!!!
+		
+		//Print formatted message using event name from Event_Names, agent name, and event times--use print_out()
+		//~ print_out("  %s  %s  HR:%lu MN:%lu SC:%lu MS:%lu mS:%lu NS:%lu\n", Event_Names[event], agentDev, hours, minutes, seconds, milliseconds, microseconds, nanoseconds);
+		printf("  %s  %s  HR:%lu MN:%lu SC:%lu MS:%lu mS:%lu NS:%lu\n", Event_Names[event], agentDev, hours, minutes, seconds, milliseconds, microseconds, nanoseconds);
+	}
 }
 
 void
