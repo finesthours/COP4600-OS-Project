@@ -43,11 +43,8 @@ int main(void)
 {
 	FILE *fp;
 	time_type sim_time = {0,0};
-	//~ event_list*   Event_List = NULL;  // pointer to head of event list
-	int c=0, timeIn, eventId, agentId;
+	int timeIn, eventId, agentId;
 	char str[128], *eventListToken, *eventName, *agentName, *timeInString;
-
-	//~ printf("%d, %d", Event_List->next->agent, Event_List->prev->agent);
 
 	//Open logon file given by constant LOGON_FILENAME
 	if((fp = fopen(LOGON_FILENAME, "r")) == NULL)
@@ -59,26 +56,16 @@ int main(void)
 	//While not end of file
 	while (fgets(str, sizeof(str), fp) != NULL)
 	{
-		//~ printf ("Line %d: %s", c, str);
-		//~ c++;
 		//Read event name, agent name, and time from each line in file
 		eventListToken = strtok(str, " ");
 		eventName = eventListToken;
-		
-		//convert event name to upper case per OSSProject-1.ppt s17
-		//~ for (p = eventName; *p != '\0'; ++p)
-		//~ {
-			//~ *p = toupper(*p);
-		//~ }
+
 		eventId = get_event_id( eventName );
 		
 		//convert agent name to upper case per OSSProject-1.ppt s17
 		eventListToken = strtok('\0', ", ");
 		agentName = eventListToken;
-		//~ for (p = agentName; *p != '\0'; ++p)
-		//~ {
-			//~ *p = toupper(*p);
-		//~ }
+
 		agentId = get_agent_id( agentName );
 		
 		//Convert time to simulation time--call Uint_to_time()
@@ -87,22 +74,10 @@ int main(void)
 		timeIn = atoi(timeInString);
 		Uint_to_time(timeIn, &sim_time);
 		
-		
-		//~ printf ("Line %d tokens: %s, %s, %d \t ", c, eventName, agentName, timeIn);
-		//~ printf ("ids: %d, %d\n", eventId, agentId);
-		//~ printf ("Line %d time: %lu, %lu\n", c, sim_time.seconds, sim_time.nanosec);
-		c++; 
-		
 		//Add event to event list using event ID, agent ID, and simulation time
 		Add_Event(eventId, agentId, &sim_time);
-		//~ Write_Event(eventId, agentId, &sim_time);
 	}
-	
-	//~ while(Event_List)
-	//~ {
-		//~ printf("struct order:\n\t%d, %d, %lu, %lu\n", Event_List->event, Event_List->agent,  Event_List->time.seconds, Event_List->time.nanosec);
-		//~ Event_List = Event_List->next;
-	//~ }
+
 	fclose(fp);
 	return 0;
 }
@@ -251,78 +226,35 @@ get_agent_id( char* agent_name )
 	@retval None
  */
 void
-Add_Event( int event, int agent, struct time_type* time )
+Add_Event( int event, int agent, struct time_type *time )
 {
 	//Allocate a new event node
-	event_list *new_node, *tempNode;
+	event_list *new_node;
 	new_node = (event_list *) malloc(sizeof(event_list));
-	tempNode = Event_List;
 	if(!new_node)
 	{
-		printf("\nno more memory");
+		printf("\nERROR: no more memory");
 		return;
 	}
-	//~ if(Event_List)
-	//~ {
-		//~ printf("before new_node: Event_List->time.seconds = %lu\n", Event_List->time.seconds);
-	//~ }
+	
 	//Set the new event node's fields to the event, agent, and time passed in
 	new_node->event = event;
 	new_node->agent = agent;
 	new_node->time = *time;
-	//~ printf("struct contents: %d, %d, %lu\n", new_node->event, new_node->agent,  new_node->time.seconds);
 	
 	//If the event list is empty
-	if(tempNode == NULL)
+	if(Event_List == NULL)
 	{
 		//Set the event list header node to the new event node
 		new_node->next = Event_List;
 		new_node->prev = Event_List;
 		Event_List = new_node;
 	}
-
-	//Else, if the new event node should precede the event list header node
-	//~ else if(Compare_time(&new_node->time, &Event_List->time) < 0)
-	//~ {
-		//~ //Place the new node at the start of the list
-		//~ tempNode = Event_List;
-		//~ Event_List = new_node;
-		//~ Event_List->next = tempNode;
-		//~ Event_List->prev = NULL;
-	//~ }
-	//Otherwise, the new node goes in the middle or at the end of the list
 	else
 	{
-		printf("Event_List->time = %lu\nnew_node->time.seconds = %lu\ncompare time = %d\n", Event_List->time.seconds, new_node->time.seconds, Compare_time(&new_node->time, &Event_List->time));
-		//Traverse the event list 
-		//~ while(Event_List->next != NULL)
-		//~ {
-			//~ //until reaching the node that should precede the new node
-			//~ if(Compare_time(&new_node->time, &Event_List->time) < 0)
-			//~ {
-				//~ //Add the new node after the node reached in the traversal
-				//~ tempNode = Event_List;
-				//~ Event_List = new_node;
-				//~ tempNode->prev->next = Event_List;
-				//~ tempNode->next->prev = Event_List;
-				//~ Event_List->next = tempNode->next;
-				//~ Event_List->prev = tempNode->prev;
-//~ 
-				//~ break;
-			//~ }
-			//~ Event_List = Event_List->next;
-		//~ }
-		//~ //--handle special case of new node being at the end of the list
-		//~ Event_List->next = new_node;
-		//~ new_node->next = NULL;
-		//~ new_node->prev = Event_List;
+		printf("Event_List->time.seconds = %d\nnew_node->time.seconds = %d\n", Event_List->agent, new_node->agent);
 	}
-	
-	//~ while(Event_List)
-	//~ {
-		//~ printf("struct order:\n\t%d, %d, %lu, %lu\n", Event_List->event, Event_List->agent,  Event_List->time.seconds, Event_List->time.nanosec);
-		//~ Event_List = Event_List->next;
-	//~ }
+
 	free(new_node);
 }
 

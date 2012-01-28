@@ -49,8 +49,14 @@ void
 Load_Events( )
 {
 	FILE *fp;
-	int c=0, timeIn;
-	char *p, str[128], *eventListToken, *eventName, *agentName, *timeInString;
+	time_type sim_time = {0,0};
+
+	int c=0, timeIn, eventId, agentId;
+	char str[128], *eventListToken, *eventName, *agentName, *timeInString;
+	
+	//~ time_type *sim_time = {0,0};
+	//~ sim_time->seconds = 0;
+	//~ sim_time->nanosec = 0;
 
 	//Open logon file given by constant LOGON_FILENAME
 	if((fp = fopen(LOGON_FILENAME, "r")) == NULL)
@@ -69,29 +75,43 @@ Load_Events( )
 		eventName = eventListToken;
 		
 		//convert event name to upper case per OSSProject-1.ppt s17
-		for (p = eventName; *p != '\0'; ++p)
-		{
-			*p = toupper(*p);
-		}
+		//~ for (p = eventName; *p != '\0'; ++p)
+		//~ {
+			//~ *p = toupper(*p);
+		//~ }
+		eventId = get_event_id( eventName );
 		
 		//convert agent name to upper case per OSSProject-1.ppt s17
 		eventListToken = strtok('\0', ", ");
 		agentName = eventListToken;
-		for (p = agentName; *p != '\0'; ++p)
-		{
-			*p = toupper(*p);
-		}
+		//~ for (p = agentName; *p != '\0'; ++p)
+		//~ {
+			//~ *p = toupper(*p);
+		//~ }
+		agentId = get_agent_id( agentName );
 		
+		//Convert time to simulation time--call Uint_to_time()
 		eventListToken = strtok('\0', ", ");
 		timeInString = eventListToken;
 		timeIn = atoi(timeInString);
-		printf ("Line %d tokens: %s, %s, %d\n", c, eventName, agentName, timeIn);
-		c++;
+		Uint_to_time(timeIn, &sim_time);
 		
-		//~ get_event_id( char* event_name )
-		//~ get_agent_id( char* agent_name )
+		
+		//~ printf ("Line %d tokens: %s, %s, %d \t ", c, eventName, agentName, timeIn);
+		//~ printf ("ids: %d, %d\n", eventId, agentId);
+		//~ printf ("Line %d time: %lu, %lu\n", c, sim_time.seconds, sim_time.nanosec);
+		c++; 
+		
+		//Add event to event list using event ID, agent ID, and simulation time
+		//~ Add_Event(eventId, agentId, &sim_time);
+		//~ Write_Event(eventId, agentId, &sim_time);
 	}
-
+	
+	//~ while(Event_List)
+	//~ {
+		//~ printf("struct order:\n\t%d, %d, %lu, %lu\n", Event_List->event, Event_List->agent,  Event_List->time.seconds, Event_List->time.nanosec);
+		//~ Event_List = Event_List->next;
+	//~ }
 	fclose(fp);
 }
 
@@ -171,6 +191,57 @@ Interrupt( )
 void
 Write_Event( int event, int agent, struct time_type *time )
 {
+	unsigned long seconds = time->seconds, minutes = 0, hours = 0;
+	unsigned long milliseconds = 0, microseconds = 0, nanoseconds = time->nanosec;
+	char agentId[3];
+	char agentName[5] = "U";
+	char *agentDev;
+	
+	//Convert the seconds field of time_type to hours, minutes, and seconds
+	hours = seconds/3600;
+	seconds = seconds - hours*3600;
+	minutes = seconds/60;
+	seconds = seconds - minutes*60;
+	
+	//~ printf("hours = %lu\nminutes = %lu\nseconds = %lu\n", hours, minutes, seconds);
+	
+	//Convert the nanoseconds field to milliseconds, microseconds and nanoseconds
+	milliseconds = nanoseconds/1000000;
+	nanoseconds = nanoseconds - milliseconds*1000000;
+	microseconds = nanoseconds/1000;
+	nanoseconds = nanoseconds - microseconds*1000;
+	
+	//~ printf("milliseconds = %lu\nmicroseconds = %lu\nnanoseconds = %lu\n", milliseconds, microseconds, nanoseconds);
+	
+	//Determine type of agent--user terminal or device:
+	//If agent ID <= Num_Terminals, then agent is user terminal:
+	if(agent <= Num_Terminals)
+	{
+		//Agent name is of the form 'U0#' where # = agent ID
+		if(agent < 10)
+			sprintf(agentId, "00%d", agent);
+		else if (agent > 10 && agent < 100)
+			sprintf(agentId, "0%d", agent);
+		else
+			sprintf(agentId, "%d", agent);
+			
+		strcat(agentName,agentId);
+		
+		//Print formatted message using event name from Event_Names, agent name, and event times--use print_out()
+		print_out("  %s  %s  HR:%lu MN:%lu SC:%lu MS:%lu mS:%lu NS:%lu\n", Event_Names[event], agentName, hours, minutes, seconds, milliseconds, microseconds, nanoseconds);
+		//~ printf("  %s  %s  HR:%lu MN:%lu SC:%lu MS:%lu mS:%lu NS:%lu\n", Event_Names[event], agentName, hours, minutes, seconds, milliseconds, microseconds, nanoseconds);
+	}
+	
+	//Otherwise, agent is a device:
+	else
+	{
+		//Agent name is stored in Dev_Table[ agent - Num_Terminals - 1]
+		agentDev = "DISK";//Dev_Table[ agent - Num_Terminals - 1] == NULL !!!!!
+		
+		//Print formatted message using event name from Event_Names, agent name, and event times--use print_out()
+		print_out("  %s  %s  HR:%lu MN:%lu SC:%lu MS:%lu mS:%lu NS:%lu\n", Event_Names[event], agentDev, hours, minutes, seconds, milliseconds, microseconds, nanoseconds);
+		//~ printf("  %s  %s  HR:%lu MN:%lu SC:%lu MS:%lu mS:%lu NS:%lu\n", Event_Names[event], agentDev, hours, minutes, seconds, milliseconds, microseconds, nanoseconds);
+	}
 }
 
 /**
@@ -195,8 +266,33 @@ Write_Event( int event, int agent, struct time_type *time )
 int
 get_event_id( char* event_name )
 {
-	// temporary return value
-	return( 0 );
+	int eventId = -1, eventNum;
+	char *p;
+	//Capitalize event name so that case does not matter
+	for (p = event_name; *p != '\0'; ++p)
+	{
+		*p = toupper(*p);
+	}
+	
+	//Verify that name's length is shorter than constant the EVENT_NAME_LENGTH_MAX
+	if(strlen(event_name) <= EVENT_NAME_LENGTH_MAX)
+	{
+		//For event ID = 0 to NUM_EVENTS
+		for(eventNum = 0; eventNum < NUM_EVENTS; eventNum++)
+		{
+			//Compare event name to Event_Names[ event ID ]
+			//If they are equal
+			if(strcmp(event_name, Event_Names[eventNum]) == 0)
+			{
+				eventId = eventNum;
+				break;
+			}
+		}
+	}
+	
+	//printf("eventName = %s ", event_name);
+	// return eventId
+	return( eventId );
 }
 
 /**
@@ -225,8 +321,45 @@ get_event_id( char* event_name )
 int
 get_agent_id( char* agent_name )
 {
-	// temporary return value
-	return( 0 );
+	int agentId = -1, agentNum;
+	char *p;
+	//Capitalize agent name so that case does not matter
+	for (p = agent_name; *p != '\0'; ++p)
+	{
+		*p = toupper(*p);
+	}
+	
+	//Verify that the name's length is shorter than the constant DEV_NAME_LENGTH
+	if(strlen(agent_name) <= DEV_NAME_LENGTH)
+	{
+		//If name starts with 'U', then agent is a user terminal:
+		if(agent_name[0] == 'U')
+		{
+			//Convert the name (except the initial 'U') into an integer--the agent ID
+			//~ printf("\n agent_name = %s\n", strchr(agent_name, agent_name[1]));
+			agentId = atoi(strchr(agent_name, agent_name[1]));
+		}
+		
+		//Otherwise, agent is a device:
+		else
+		{
+			//For agent ID = 0 to Num_Devices
+			for(agentNum = 0; agentNum < 5/*Num_Devices == 0!!!*/; agentNum++)
+			{
+				//Compare agent name to the name at Dev_Table[ agent ID ]
+				//If they are equal
+				if(strcmp(agent_name, "DISK"/*Dev_Table[agentNum] == NULL!!!*/) == 0)
+				{
+					//Return agent ID + Num_Terminals + 1 since device agent IDs follow user agent IDs
+					agentId = agentNum + Num_Terminals +1;
+					break;
+				}
+			}
+		}
+	}
+	
+	// return agentId
+	return( agentId );
 }
 
 /**
