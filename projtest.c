@@ -97,7 +97,7 @@ int main(void)
 		Add_Event(eventId, agentId, &sim_time);
 	}
 	
-	//~ printf("Event List:\n");
+	printf("%d\n", c);
 	while(Event_List)
 	{
 		printf("%d, %d, %lu, %lu\n", Event_List->event, Event_List->agent,  Event_List->time.seconds, Event_List->time.nanosec);
@@ -298,9 +298,13 @@ Add_Event( int event, int agent, struct time_type* time )
 				currNode->prev = newNode;
 				return;
 			}
-			newNode->next = currNode;
-			newNode->prev = NULL;
-			currNode->prev = newNode;
+			Event_List = newNode;
+			Event_List->next = currNode;
+			Event_List->prev = NULL;
+			currNode->prev = Event_List;
+			//~ newNode->next = currNode;
+			//~ newNode->prev = NULL;
+			//~ currNode->prev = newNode;
 			return;
 		}
 	}
