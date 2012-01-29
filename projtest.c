@@ -95,14 +95,14 @@ int main(void)
 		
 		//Add event to event list using event ID, agent ID, and simulation time
 		Add_Event(eventId, agentId, &sim_time);
-		//~ Write_Event(eventId, agentId, &sim_time);
 	}
 	
-	//~ while(Event_List)
-	//~ {
-		//~ printf("struct order:\n\t%d, %d, %lu, %lu\n", Event_List->event, Event_List->agent,  Event_List->time.seconds, Event_List->time.nanosec);
-		//~ Event_List = Event_List->next;
-	//~ }
+	//~ printf("Event List:\n");
+	while(Event_List)
+	{
+		printf("%d, %d, %lu, %lu\n", Event_List->event, Event_List->agent,  Event_List->time.seconds, Event_List->time.nanosec);
+		Event_List = Event_List->next;
+	}
 	fclose(fp);
 	return 0;
 }
@@ -254,76 +254,98 @@ void
 Add_Event( int event, int agent, struct time_type* time )
 {
 	//Allocate a new event node
-	event_list *new_node, *tempNode;
-	new_node = (event_list *) malloc(sizeof(event_list));
-	tempNode = Event_List;
-	if(!new_node)
+	event_list *newNode, *currNode, *old;
+	newNode = (event_list *) malloc(sizeof(event_list));
+	
+	if(!newNode)
 	{
-		printf("\nno more memory");
+		printf("\nERROR: no more memory");
 		return;
 	}
-	//~ if(Event_List)
-	//~ {
-		//~ printf("before new_node: Event_List->time.seconds = %lu\n", Event_List->time.seconds);
-	//~ }
+	
 	//Set the new event node's fields to the event, agent, and time passed in
-	new_node->event = event;
-	new_node->agent = agent;
-	new_node->time = *time;
-	//~ printf("struct contents: %d, %d, %lu\n", new_node->event, new_node->agent,  new_node->time.seconds);
+	newNode->event = event;
+	newNode->agent = agent;
+	newNode->time = *time;
 	
 	//If the event list is empty
-	if(tempNode == NULL)
+	if(Event_List == NULL)
 	{
 		//Set the event list header node to the new event node
-		new_node->next = Event_List;
-		new_node->prev = Event_List;
-		Event_List = new_node;
+		newNode->next = NULL;
+		newNode->prev = NULL;
+		Event_List = newNode;
+		return;
 	}
 
-	//Else, if the new event node should precede the event list header node
-	//~ else if(Compare_time(&new_node->time, &Event_List->time) < 0)
+	currNode = Event_List;
+	old = NULL;
+	
+	while(currNode)
+	{
+		if(Compare_time(&newNode->time, &currNode->time) > 0)
+		{
+			old = currNode;
+			currNode = currNode->next;
+		}
+		else
+		{
+			if(currNode->prev)
+			{
+				currNode->prev->next = newNode;
+				newNode->next = currNode;
+				newNode->prev = currNode->prev;
+				currNode->prev = newNode;
+				return;
+			}
+			newNode->next = currNode;
+			newNode->prev = NULL;
+			currNode->prev = newNode;
+			return;
+		}
+	}
+	old->next = newNode;
+	newNode->next = NULL;
+	newNode->prev = old;
+	//~ //Else, if the new event node should precede the event list header node
+	//~ if(Compare_time(&newNode->time, &currNode->time) < 0)
 	//~ {
 		//~ //Place the new node at the start of the list
-		//~ tempNode = Event_List;
-		//~ Event_List = new_node;
-		//~ Event_List->next = tempNode;
+		//~ Event_List = newNode;
+		//~ Event_List->next = currNode;
 		//~ Event_List->prev = NULL;
+		//~ currNode->prev = Event_List;
+		//~ return;
 	//~ }
-	//Otherwise, the new node goes in the middle or at the end of the list
-	else
-	{
-		printf("Event_List->time = %lu\nnew_node->time.seconds = %lu\ncompare time = %d\n", Event_List->time.seconds, new_node->time.seconds, Compare_time(&new_node->time, &Event_List->time));
-		//Traverse the event list 
-		//~ while(Event_List->next != NULL)
+	//~ 
+	//~ //Otherwise, the new node goes in the middle or at the end of the list
+	//~ else
+	//~ {
+		//~ //Traverse the event list 
+		//~ while(currNode->next != NULL)
 		//~ {
 			//~ //until reaching the node that should precede the new node
-			//~ if(Compare_time(&new_node->time, &Event_List->time) < 0)
+			//~ if(Compare_time(&newNode->time, &currNode->time) < 0)
 			//~ {
 				//~ //Add the new node after the node reached in the traversal
-				//~ tempNode = Event_List;
-				//~ Event_List = new_node;
-				//~ tempNode->prev->next = Event_List;
-				//~ tempNode->next->prev = Event_List;
-				//~ Event_List->next = tempNode->next;
-				//~ Event_List->prev = tempNode->prev;
+				//~ newNode->prev = currNode->prev;
+				//~ newNode->next = currNode;
+				//~ currNode->prev->next = newNode;
+				//~ currNode->prev = newNode;
 //~ 
-				//~ break;
+				//~ return;
 			//~ }
-			//~ Event_List = Event_List->next;
+			//~ currNode = currNode->next;
 		//~ }
+		//~ 
 		//~ //--handle special case of new node being at the end of the list
-		//~ Event_List->next = new_node;
-		//~ new_node->next = NULL;
-		//~ new_node->prev = Event_List;
-	}
-	
-	//~ while(Event_List)
-	//~ {
-		//~ printf("struct order:\n\t%d, %d, %lu, %lu\n", Event_List->event, Event_List->agent,  Event_List->time.seconds, Event_List->time.nanosec);
-		//~ Event_List = Event_List->next;
+		//~ if(currNode->next == NULL)
+		//~ {
+			//~ currNode->next = newNode;
+			//~ newNode->next = NULL;
+			//~ newNode->prev = currNode;
+		//~ }
 	//~ }
-	free(new_node);
 }
 
 /**
