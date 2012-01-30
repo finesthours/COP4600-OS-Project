@@ -14,7 +14,6 @@
 		Minor Revisions by Sean Szumlanski, Spring 2010
 */
 
-
 #include <assert.h>
 #include <ctype.h>
 #include <stdio.h>
@@ -51,12 +50,9 @@ Load_Events( )
 	FILE *fp;
 	time_type sim_time = {0,0};
 
-	int c=0, timeIn, eventId, agentId;
+	int eventId, agentId;
 	char str[128], *eventListToken, *eventName, *agentName, *timeInString;
-	
-	//~ time_type *sim_time = {0,0};
-	//~ sim_time->seconds = 0;
-	//~ sim_time->nanosec = 0;
+	long long int timeIn;
 
 	//Open logon file given by constant LOGON_FILENAME
 	if((fp = fopen(LOGON_FILENAME, "r")) == NULL)
@@ -68,48 +64,28 @@ Load_Events( )
 	//While not end of file
 	while (fgets(str, sizeof(str), fp) != NULL)
 	{
-		//~ printf ("Line %d: %s", c, str);
-		//~ c++;
 		//Read event name, agent name, and time from each line in file
 		eventListToken = strtok(str, " ");
 		eventName = eventListToken;
-		
-		//convert event name to upper case per OSSProject-1.ppt s17
-		//~ for (p = eventName; *p != '\0'; ++p)
-		//~ {
-			//~ *p = toupper(*p);
-		//~ }
 		eventId = get_event_id( eventName );
 		
 		//convert agent name to upper case per OSSProject-1.ppt s17
 		eventListToken = strtok('\0', ", ");
 		agentName = eventListToken;
-		//~ for (p = agentName; *p != '\0'; ++p)
-		//~ {
-			//~ *p = toupper(*p);
-		//~ }
 		agentId = get_agent_id( agentName );
 		
 		//Convert time to simulation time--call Uint_to_time()
 		eventListToken = strtok('\0', ", ");
 		timeInString = eventListToken;
-		timeIn = atoi(timeInString);
+		timeIn = atoll(timeInString);
 		Uint_to_time(timeIn, &sim_time);
 		
-		
-		//~ printf ("Line %d tokens: %s, %s, %d \t ", c, eventName, agentName, timeIn);
-		//~ printf ("ids: %d, %d\n", eventId, agentId);
-		//~ printf ("Line %d time: %lu, %lu\n", c, sim_time.seconds, sim_time.nanosec);
-		c++; 
-		
 		//Add event to event list using event ID, agent ID, and simulation time
-		//~ Add_Event(eventId, agentId, &sim_time);
-		//~ Write_Event(eventId, agentId, &sim_time);
+		Add_Event(eventId, agentId, &sim_time);
 	}
-	
 	//~ while(Event_List)
 	//~ {
-		//~ printf("struct order:\n\t%d, %d, %lu, %lu\n", Event_List->event, Event_List->agent,  Event_List->time.seconds, Event_List->time.nanosec);
+		//~ printf("%d, %d, %lu, %lu\n", Event_List->event, Event_List->agent,  Event_List->time.seconds, Event_List->time.nanosec);
 		//~ Event_List = Event_List->next;
 	//~ }
 	fclose(fp);
@@ -143,6 +119,61 @@ Load_Events( )
 void
 Add_Event( int event, int agent, struct time_type* time )
 {
+	//Allocate a new event node
+	event_list *newNode, *currNode, *old;
+	newNode = (event_list *) malloc(sizeof(event_list));
+	
+	if(!newNode)
+	{
+		printf("\nERROR: no more memory");
+		return;
+	}
+	
+	//Set the new event node's fields to the event, agent, and time passed in
+	newNode->event = event;
+	newNode->agent = agent;
+	newNode->time = *time;
+	
+	//If the event list is empty
+	if(Event_List == NULL)
+	{
+		//Set the event list header node to the new event node
+		newNode->next = NULL;
+		newNode->prev = NULL;
+		Event_List = newNode;
+		return;
+	}
+
+	currNode = Event_List;
+	old = NULL;
+	
+	while(currNode)
+	{
+		if(Compare_time(&newNode->time, &currNode->time) >= 0)
+		{
+			old = currNode;
+			currNode = currNode->next;
+		}
+		else
+		{
+			if(currNode->prev)
+			{
+				currNode->prev->next = newNode;
+				newNode->next = currNode;
+				newNode->prev = currNode->prev;
+				currNode->prev = newNode;
+				return;
+			}
+			Event_List = newNode;
+			Event_List->next = currNode;
+			Event_List->prev = NULL;
+			currNode->prev = Event_List;
+			return;
+		}
+	}
+	old->next = newNode;
+	newNode->next = NULL;
+	newNode->prev = old;
 }
 
 /**
@@ -163,6 +194,34 @@ Add_Event( int event, int agent, struct time_type* time )
 void
 Interrupt( )
 {
+	
+	//Remove an event from Event_List
+	event_list *node;
+	int event, agent;
+	time_type time;
+	
+	node = Event_List;
+	Event_List = node->next;
+	if(Event_List)
+		Event_List->prev = NULL;
+		
+	//Set Clock, Agent and Event to the respective fields in the removed event
+	time = node->time;
+	agent = node->agent;
+	event = node->event;
+	
+	//Write the event to the output file--call write_event()
+	Write_Event( event, agent, &time );
+	
+	//Deallocate the removed event item
+	free(node);
+	
+	//Save CPU.mode and CPU.pc into Old_State.
+	Old_State = CPU.state;
+	
+	//Change New_State to CPU.mode and CPU.pc
+	CPU.state = New_State;
+	//~ printf("\n\nINTERRUPT!!!\n\n");
 }
 
 /**
@@ -194,7 +253,8 @@ Write_Event( int event, int agent, struct time_type *time )
 	unsigned long seconds = time->seconds, minutes = 0, hours = 0;
 	unsigned long milliseconds = 0, microseconds = 0, nanoseconds = time->nanosec;
 	char agentId[3];
-	char agentName[5] = "U";
+	char agentName[5] = "U0";
+	//~ char *agentName = "U005";
 	char *agentDev;
 	
 	//Convert the seconds field of time_type to hours, minutes, and seconds
@@ -203,44 +263,38 @@ Write_Event( int event, int agent, struct time_type *time )
 	minutes = seconds/60;
 	seconds = seconds - minutes*60;
 	
-	//~ printf("hours = %lu\nminutes = %lu\nseconds = %lu\n", hours, minutes, seconds);
-	
 	//Convert the nanoseconds field to milliseconds, microseconds and nanoseconds
 	milliseconds = nanoseconds/1000000;
 	nanoseconds = nanoseconds - milliseconds*1000000;
 	microseconds = nanoseconds/1000;
 	nanoseconds = nanoseconds - microseconds*1000;
 	
-	//~ printf("milliseconds = %lu\nmicroseconds = %lu\nnanoseconds = %lu\n", milliseconds, microseconds, nanoseconds);
-	
 	//Determine type of agent--user terminal or device:
 	//If agent ID <= Num_Terminals, then agent is user terminal:
 	if(agent <= Num_Terminals)
 	{
 		//Agent name is of the form 'U0#' where # = agent ID
-		if(agent < 10)
-			sprintf(agentId, "00%d", agent);
-		else if (agent > 10 && agent < 100)
+		//~ if(agent < 10)
+			//~ sprintf(agentId, "00%d", agent);
+		//~ else if (agent > 10 && agent < 100)
 			sprintf(agentId, "0%d", agent);
-		else
-			sprintf(agentId, "%d", agent);
+		//~ else
+			//~ sprintf(agentId, "%d", agent);
 			
 		strcat(agentName,agentId);
-		
+		agentName[strlen(agentName)] = '\0';
 		//Print formatted message using event name from Event_Names, agent name, and event times--use print_out()
 		print_out("  %s  %s  HR:%lu MN:%lu SC:%lu MS:%lu mS:%lu NS:%lu\n", Event_Names[event], agentName, hours, minutes, seconds, milliseconds, microseconds, nanoseconds);
-		//~ printf("  %s  %s  HR:%lu MN:%lu SC:%lu MS:%lu mS:%lu NS:%lu\n", Event_Names[event], agentName, hours, minutes, seconds, milliseconds, microseconds, nanoseconds);
 	}
 	
 	//Otherwise, agent is a device:
 	else
 	{
 		//Agent name is stored in Dev_Table[ agent - Num_Terminals - 1]
-		agentDev = "DISK";//Dev_Table[ agent - Num_Terminals - 1] == NULL !!!!!
+		agentDev = Dev_Table[ agent - Num_Terminals - 1].name;
 		
 		//Print formatted message using event name from Event_Names, agent name, and event times--use print_out()
 		print_out("  %s  %s  HR:%lu MN:%lu SC:%lu MS:%lu mS:%lu NS:%lu\n", Event_Names[event], agentDev, hours, minutes, seconds, milliseconds, microseconds, nanoseconds);
-		//~ printf("  %s  %s  HR:%lu MN:%lu SC:%lu MS:%lu mS:%lu NS:%lu\n", Event_Names[event], agentDev, hours, minutes, seconds, milliseconds, microseconds, nanoseconds);
 	}
 }
 
@@ -290,7 +344,6 @@ get_event_id( char* event_name )
 		}
 	}
 	
-	//printf("eventName = %s ", event_name);
 	// return eventId
 	return( eventId );
 }
@@ -336,7 +389,6 @@ get_agent_id( char* agent_name )
 		if(agent_name[0] == 'U')
 		{
 			//Convert the name (except the initial 'U') into an integer--the agent ID
-			//~ printf("\n agent_name = %s\n", strchr(agent_name, agent_name[1]));
 			agentId = atoi(strchr(agent_name, agent_name[1]));
 		}
 		
@@ -344,11 +396,11 @@ get_agent_id( char* agent_name )
 		else
 		{
 			//For agent ID = 0 to Num_Devices
-			for(agentNum = 0; agentNum < 5/*Num_Devices == 0!!!*/; agentNum++)
+			for(agentNum = 0; agentNum < Num_Devices; agentNum++)
 			{
 				//Compare agent name to the name at Dev_Table[ agent ID ]
 				//If they are equal
-				if(strcmp(agent_name, "DISK"/*Dev_Table[agentNum] == NULL!!!*/) == 0)
+				if(strcmp(agent_name, Dev_Table[agentNum].name) == 0)
 				{
 					//Return agent ID + Num_Terminals + 1 since device agent IDs follow user agent IDs
 					agentId = agentNum + Num_Terminals +1;

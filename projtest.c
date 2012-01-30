@@ -16,6 +16,7 @@ void Uint_to_time( unsigned long ul_time, struct time_type* sim_time );
 int  Compare_time( struct time_type *time_1, struct time_type *time_2 );
 event_list*   Event_List = NULL;  // pointer to head of event list
 int  Num_Terminals    =  6;   // Number of terminals
+void Load_Events( );
 
 // Names of events
 char* Event_Names[] =
@@ -40,6 +41,21 @@ char* Event_Names[] =
 	@retval None
  */
 int main(void)
+{
+	Load_Events();
+	
+	//~ printf("%d\n", c);
+	while(Event_List)
+	{
+		Interrupt();
+		//~ printf("%d, %d, %lu, %lu\n", Event_List->event, Event_List->agent,  Event_List->time.seconds, Event_List->time.nanosec);
+		//~ Event_List = Event_List->next;
+	}
+	return 0;
+}
+
+void
+Load_Events( )
 {
 	FILE *fp;
 	time_type sim_time = {0,0};
@@ -97,14 +113,8 @@ int main(void)
 		Add_Event(eventId, agentId, &sim_time);
 	}
 	
-	printf("%d\n", c);
-	while(Event_List)
-	{
-		printf("%d, %d, %lu, %lu\n", Event_List->event, Event_List->agent,  Event_List->time.seconds, Event_List->time.nanosec);
-		Event_List = Event_List->next;
-	}
+	
 	fclose(fp);
-	return 0;
 }
 
 /**
@@ -302,54 +312,12 @@ Add_Event( int event, int agent, struct time_type* time )
 			Event_List->next = currNode;
 			Event_List->prev = NULL;
 			currNode->prev = Event_List;
-			//~ newNode->next = currNode;
-			//~ newNode->prev = NULL;
-			//~ currNode->prev = newNode;
 			return;
 		}
 	}
 	old->next = newNode;
 	newNode->next = NULL;
 	newNode->prev = old;
-	//~ //Else, if the new event node should precede the event list header node
-	//~ if(Compare_time(&newNode->time, &currNode->time) < 0)
-	//~ {
-		//~ //Place the new node at the start of the list
-		//~ Event_List = newNode;
-		//~ Event_List->next = currNode;
-		//~ Event_List->prev = NULL;
-		//~ currNode->prev = Event_List;
-		//~ return;
-	//~ }
-	//~ 
-	//~ //Otherwise, the new node goes in the middle or at the end of the list
-	//~ else
-	//~ {
-		//~ //Traverse the event list 
-		//~ while(currNode->next != NULL)
-		//~ {
-			//~ //until reaching the node that should precede the new node
-			//~ if(Compare_time(&newNode->time, &currNode->time) < 0)
-			//~ {
-				//~ //Add the new node after the node reached in the traversal
-				//~ newNode->prev = currNode->prev;
-				//~ newNode->next = currNode;
-				//~ currNode->prev->next = newNode;
-				//~ currNode->prev = newNode;
-//~ 
-				//~ return;
-			//~ }
-			//~ currNode = currNode->next;
-		//~ }
-		//~ 
-		//~ //--handle special case of new node being at the end of the list
-		//~ if(currNode->next == NULL)
-		//~ {
-			//~ currNode->next = newNode;
-			//~ newNode->next = NULL;
-			//~ newNode->prev = currNode;
-		//~ }
-	//~ }
 }
 
 /**
@@ -381,7 +349,8 @@ Write_Event( int event, int agent, struct time_type *time )
 	unsigned long seconds = time->seconds, minutes = 0, hours = 0;
 	unsigned long milliseconds = 0, microseconds = 0, nanoseconds = time->nanosec;
 	char agentId[3];
-	char agentName[5] = "U";
+	char agentName[5] = "U0";
+	//~ char *agentName = "U005";
 	char *agentDev;
 	
 	//Convert the seconds field of time_type to hours, minutes, and seconds
@@ -405,14 +374,15 @@ Write_Event( int event, int agent, struct time_type *time )
 	if(agent <= Num_Terminals)
 	{
 		//Agent name is of the form 'U0#' where # = agent ID
-		if(agent < 10)
-			sprintf(agentId, "00%d", agent);
-		else if (agent > 10 && agent < 100)
+		//~ if(agent < 10)
+			//~ sprintf(agentId, "00%d", agent);
+		//~ else if (agent > 10 && agent < 100)
 			sprintf(agentId, "0%d", agent);
-		else
-			sprintf(agentId, "%d", agent);
-			
+		//~ else
+			//~ sprintf(agentId, "%d", agent);
+			//~ 
 		strcat(agentName,agentId);
+		agentName[strlen(agentName)] = '\0';
 		
 		//Print formatted message using event name from Event_Names, agent name, and event times--use print_out()
 		//~ print_out("  %s  %s  HR:%lu MN:%lu SC:%lu MS:%lu mS:%lu NS:%lu\n", Event_Names[event], agentName, hours, minutes, seconds, milliseconds, microseconds, nanoseconds);
@@ -449,7 +419,32 @@ Write_Event( int event, int agent, struct time_type *time )
 void
 Interrupt( )
 {
+	//Remove an event from Event_List
+	event_list *node;
+	int event, agent;
+	time_type time;
 	
+	node = Event_List;
+	Event_List = node->next;
+	if(Event_List)
+		Event_List->prev = NULL;
+		
+	//Set Clock, Agent and Event to the respective fields in the removed event
+	time = node->time;
+	agent = node->agent;
+	event = node->event;
+	
+	//Write the event to the output file--call write_event()
+	Write_Event( event, agent, &time );
+	
+	//Deallocate the removed event item
+	free(node);
+	
+	//Save CPU.mode and CPU.pc into Old_State.
+	//~ Old_State = CPU.state;
+	
+	//Change New_State to CPU.mode and CPU.pc
+	//~ CPU.state = New_State;
 }
 
 void
