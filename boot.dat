@@ -1,0 +1,30 @@
+PROGRAM    1
+SEGMENT    9  0xFF
+SIO       23
+PRNT     100
+SIO       32
+DISK     300
+WIO        0
+REQ      [0,3]
+SIO       15
+PRNT     150
+END       17
+
+PROGRAM    1
+SEGMENT    5  0xee
+SIO       10
+DISK    1000
+WIO        0
+REQ     [0,1]
+END       37
+
+PROGRAM    1
+SEGMENT    7  0xAA
+SIO       18
+PRNT     200
+SIO        5
+PRNT     200
+WIO       19
+REQ     [0,1]
+END       13
+
