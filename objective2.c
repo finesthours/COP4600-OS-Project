@@ -21,7 +21,7 @@
 #include <string.h>
 #include "osdefs.h"
 #include "externs.h"
-z
+
 /**
 	Simulate booting the operating system by loading the boot program into
 	kernel memory.
@@ -95,8 +95,35 @@ Boot( )
 	/** if the current objective is not 2, then simply return from the function */
 	
 	FILE*  Prog_Files =  fopen( BOOT_FILENAME, "r" );
-	int program, size_of_segment, access_bits;
+	int numSegs, size_of_segment, access_bits, counter;
+	char buf[BUFSIZ];
 	
+	//Read fields the "PROGRAM" and number of segments from boot file
+	if(fscanf(Prog_Files, "%s %d", buf,&numSegs) != EOF)
+	{
+		//printf("numSegs = %d?", numSegs);
+		
+		//Read segment information from boot file:
+		
+		//For each segment in boot file
+		for(counter = 0; counter < numSegs; counter++)
+		{
+			//Read "SEGMENT size_of_segment access_bits" from boot file
+			fscanf(Prog_Files, "%s %d %x", buf, &size_of_segment, &access_bits);
+		
+			//printf("%s, %d, %x\n", buf, size_of_segment, access_bits);
+			//Set access bits of current segment
+			Mem_Map[counter]->access = access_bits;
+			//Set size of current segment
+			Mem_Map[counter]->size = size_of_segment;
+		}
+		
+	}
+	else
+	{
+		printf("File Empty");
+		return;
+	}
 	//segment_type* Mem_Map-> unsigned char access, unsigned int size, int base
 	//The upper half of Mem_Map always holds the address map for the operating system, i.e., Mem_Map[Max_Segments ... 2*Max_Segments - 1] 
 	//The lower half is reserved for user programs = Mem_Map[0 ... Max_Segments]).

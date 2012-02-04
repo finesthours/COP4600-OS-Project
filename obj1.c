@@ -339,13 +339,14 @@ get_event_id( char* event_name )
 			if(strcmp(event_name, Event_Names[eventNum]) == 0)
 			{
 				eventId = eventNum;
-				break;
+				// return eventId
+				return( eventId );
 			}
 		}
 	}
+	//Report error if no event matched
+	err_warn("\nWARNING: NO EVENT MATCHED\n");
 	
-	// return eventId
-	return( eventId );
 }
 
 /**
@@ -390,6 +391,7 @@ get_agent_id( char* agent_name )
 		{
 			//Convert the name (except the initial 'U') into an integer--the agent ID
 			agentId = atoi(strchr(agent_name, agent_name[1]));
+			return( agentId );
 		}
 		
 		//Otherwise, agent is a device:
@@ -404,14 +406,14 @@ get_agent_id( char* agent_name )
 				{
 					//Return agent ID + Num_Terminals + 1 since device agent IDs follow user agent IDs
 					agentId = agentNum + Num_Terminals +1;
-					break;
+					// return agentId
+					return( agentId );
 				}
 			}
 		}
 	}
-	
-	// return agentId
-	return( agentId );
+	//Report error if no agent name matched
+	err_warn("\nWARNING: NO AGENT NAME MATCHED\n");
 }
 
 /**

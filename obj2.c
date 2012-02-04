@@ -91,6 +91,73 @@
 void
 Boot( )
 {
+	/** if the current objective is not 2, then simply return from the function */
+
+	int numSegs, size_of_segment, access_bits, currSeg, currIns, currMem = 0;
+	char buf[BUFSIZ];
+	
+	//Read fields the "PROGRAM" and number of segments from boot file
+	if(fscanf(Prog_Files[BOOT], "%s %d", buf,&numSegs) == EOF)
+	{
+		printf("File Empty");
+		return;
+	}
+	//~ printf("memsize = %d?", Mem_Size);
+		
+	//Read segment information from boot file:
+	//For each segment in boot file
+	for(currSeg = 0; currSeg < numSegs; currSeg++)
+	{
+		//Read "SEGMENT size_of_segment access_bits" from boot file
+		fscanf(Prog_Files[BOOT], "%s %d %x", buf, &size_of_segment, &access_bits);
+		//Set access bits of current segment
+		Mem_Map[currSeg].access = access_bits;
+		//Set size of current segment
+		Mem_Map[currSeg].size = size_of_segment;
+		//~ printf("%d, %x\n", Mem_Map[currSeg].size, Mem_Map[currSeg].access);
+		//Go to next segment in Mem_Map
+	}
+	
+	//Read instructions from boot file:
+	//Current position in main memory--incremented for each instruction read
+	//For each segment
+	for(currSeg = 0; currSeg < numSegs; currSeg++)
+	{
+		//Set base pointer of segment to its location in main memory
+		Mem_Map[currSeg].base = currMem;
+		//For each instruction in the segment
+		for(currIns = 0; currIns < Mem_Map[currSeg].size; currIns++)
+		{
+			//Read instruction into memory--call Get_Instr()
+			Get_Instr( BOOT, &Mem[currMem] );
+			//Increment current position in main memory
+			currMem++;
+			//Go to next segment in Mem_Map
+		}
+		//~ currMem += Mem_Map[currSeg].size
+	}
+	
+	//Adjust size of memory since boot program is loaded into memory:
+	
+	//Decrement total amount of free memory (Total_Free)
+	Total_Free -= currMem;
+	//Decrement size of free memory block (Free_Mem->size)
+	Free_Mem->size -= currMem;
+	//Move location of first free memory block (Free_Mem->base)
+	Free_Mem->base += currMem;
+	
+	//~ printf("totfree = %u, freesize = %u, freemem = %u", Total_Free, Free_Mem->size, Free_Mem->base);
+	
+	
+	//segment_type* Mem_Map-> unsigned char access, unsigned int size, int base
+	//The upper half of Mem_Map always holds the address map for the operating system, i.e., Mem_Map[Max_Segments ... 2*Max_Segments - 1] 
+	//The lower half is reserved for user programs = Mem_Map[0 ... Max_Segments]).
+	//instr_type* Mem->opcode_type opcode[], operand_type operand.unsigned long burst, unsigned long bytes, unsigned int count, addr_type address.segment, offset
+	//seg_list*  Free_Mem->unsigned int base, unsigned int size, seg_list* next
+	//unsigned int  Total_Free = 1000;
+	
+	//~ void Get_Instr( int prog_id, struct instr_type* instruction );
+	//~ void Display_pgm( segment_type* seg_table, int seg_num, pcb_type* pcb )
 }
 
 /**
@@ -145,6 +212,15 @@ Boot( )
 void
 Get_Instr( int prog_id, struct instr_type* instruction )
 {
+	char opcode_str[BUFSIZ], opRand[BUFSIZ];
+	//Read opcode and operand from file--store as strings initially Convert to uppercase so that case does not matter
+	fscanf(Prog_Files[prog_id], "%s %s", opcode_str, opRand);
+	
+	//Search all op_code IDs to determine which op_code that the opcode_str matches with
+	
+	
+	//~ printf("opcode = %s, operand = %s\n", opcode_str, opRand);
+	return;
 }
 
 /**
