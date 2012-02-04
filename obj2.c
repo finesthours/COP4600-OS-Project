@@ -92,7 +92,9 @@ void
 Boot( )
 {
 	/** if the current objective is not 2, then simply return from the function */
-
+	if(Objective != 2)
+		return;
+		
 	int numSegs, size_of_segment, access_bits, currSeg, currIns, currMem = 0;
 	char buf[BUFSIZ];
 	
@@ -212,15 +214,77 @@ Boot( )
 void
 Get_Instr( int prog_id, struct instr_type* instruction )
 {
-	char opcode_str[BUFSIZ], opRand[BUFSIZ];
+	char opcode_str[BUFSIZ], operand_str[BUFSIZ];
+	int counter;
+	//~ unsigned long burst = 0; /** CPU cycles for SIO, WIO, and END instructions. */
+	//~ struct addr_type address = {0, 0}; /** Address for REQ and JUMP instructions. */
+	//~ unsigned int count = 0; /** Skip count for SKIP instruction. */
+	//~ unsigned long bytes = 0; /** Byte transfer count for devices. */
+	
 	//Read opcode and operand from file--store as strings initially Convert to uppercase so that case does not matter
-	fscanf(Prog_Files[prog_id], "%s %s", opcode_str, opRand);
+	fscanf(Prog_Files[prog_id], "%s %s", opcode_str, operand_str);
 	
 	//Search all op_code IDs to determine which op_code that the opcode_str matches with
+	for(counter = 0; counter < NUM_OPCODES; counter++)
+	{
+		//If found the correct op_code
+		if(strcmp(Op_Names[counter], opcode_str) == 0)
+		{
+			//Save the opcode in the instruction
+			instruction->code = counter; 
+			
+			//Process the operand differently depending on the op_code type:
+				
+			//If SIO, WIO, or END instruction
+			if(counter == 0 || counter == 1 || counter == 5)
+			{
+				//Convert operand into burst count
+				//~ instruction->operand = burst;
+				instruction->operand.burst = 0;
+			}
+				
+			//Else, if REQ or JUMP instruction
+			else if(counter == 2 || counter == 3)
+			{
+				//Convert operand into segment and offset pair
+				//~ instruction->operand = address;
+				instruction->operand.address = {0, 0};
+			}
+			
+			//Else, if SKIP instruction
+			else if(counter == 4)
+			{
+				//Convert operand into skip count
+				//~ instruction->operand = count;
+				instruction->operand.count = 0;
+			}
+			
+			return;
+		}
+	}
 	
+	//If no op_codes matched, the op_code may correspond to a device
 	
-	//~ printf("opcode = %s, operand = %s\n", opcode_str, opRand);
-	return;
+	//Search device table for the particular device
+	for(counter = 0; counter < Num_Devices; counter++)
+	{
+		//If found the correct device ID
+		if(strcmp(Dev_Table[counter].name, opcode_str) == 0)
+		{
+			//Assign a unique opcode for the device (See note above)
+			instruction->code = counter + NUM_OPCODES; 
+			//Convert operand into number of bytes to transfer
+			//~ instruction->operand = bytes;
+			instruction->operand.bytes = 0;
+			return;
+		}
+		
+	}
+	
+	//~ printf("opcode = %s, operand = %s\n", opcode_str, operand_str);
+		
+	//If no devices matched, quit program
+	err_quit("\nNO DEVICES MATCHED\n");
 }
 
 /**
