@@ -217,7 +217,7 @@ Get_Instr( int prog_id, struct instr_type* instruction )
 	char opcode_str[BUFSIZ], operand_str[BUFSIZ];
 	int counter;
 	//~ unsigned long burst = 0; /** CPU cycles for SIO, WIO, and END instructions. */
-	//~ struct addr_type address = {0, 0}; /** Address for REQ and JUMP instructions. */
+	struct addr_type address = {0, 0}; /** Address for REQ and JUMP instructions. */
 	//~ unsigned int count = 0; /** Skip count for SKIP instruction. */
 	//~ unsigned long bytes = 0; /** Byte transfer count for devices. */
 	
@@ -231,7 +231,7 @@ Get_Instr( int prog_id, struct instr_type* instruction )
 		if(strcmp(Op_Names[counter], opcode_str) == 0)
 		{
 			//Save the opcode in the instruction
-			instruction->code = counter; 
+			instruction->opcode = counter; 
 			
 			//Process the operand differently depending on the op_code type:
 				
@@ -248,7 +248,7 @@ Get_Instr( int prog_id, struct instr_type* instruction )
 			{
 				//Convert operand into segment and offset pair
 				//~ instruction->operand = address;
-				instruction->operand.address = {0, 0};
+				instruction->operand.address = address;
 			}
 			
 			//Else, if SKIP instruction
@@ -272,7 +272,7 @@ Get_Instr( int prog_id, struct instr_type* instruction )
 		if(strcmp(Dev_Table[counter].name, opcode_str) == 0)
 		{
 			//Assign a unique opcode for the device (See note above)
-			instruction->code = counter + NUM_OPCODES; 
+			instruction->opcode = counter + NUM_OPCODES; 
 			//Convert operand into number of bytes to transfer
 			//~ instruction->operand = bytes;
 			instruction->operand.bytes = 0;
