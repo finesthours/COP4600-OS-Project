@@ -163,12 +163,7 @@ Boot( )
 	{
 		//Display segment Mem_Map[i + Max_Segments] since kernel resides in
 		//Upper half of Mem_Map; pass NULL as PCB since OS has no PCB
-		//~ Display_pgm( Mem_Map, currSeg, NULL );
-	}
-	
-	for(test = 0; test < currMem; test++)
-	{
-		printf("%d. %d\n", test, Mem[test].opcode );
+		Display_pgm( Mem_Map, currSeg, NULL );
 	}
 	
 	//segment_type* Mem_Map-> unsigned char access, unsigned int size, int base
@@ -598,39 +593,39 @@ void
 Display_pgm( segment_type* seg_table, int seg_num, pcb_type* pcb )
 {	
 	
-	int counter;
+	int counter1, counter2;
 	//Print segment header:
 	
 	//If boot process
 	if(Objective == 2)
 	{
 		//Print "BOOT"
-		print_out("         SEGMENT #%d OF PROGRAM BOOT OF PROCESS BOOT\n", seg_num);
+		print_out("        SEGMENT #%d OF PROGRAM BOOT OF PROCESS BOOT\n", seg_num);
 	}
 	
 	//Else, if user process
 	else
 	{
 		//Print name of user's program
-		print_out("         SEGMENT #%d OF PROGRAM %s OF PROCESS BOOT\n", seg_num, Prog_Names[ pcb->script[ pcb->current_prog ] ]);
+		print_out("        SEGMENT #%d OF PROGRAM %s OF PROCESS BOOT\n", seg_num, Prog_Names[ pcb->script[ pcb->current_prog ] ]);
 	}
 	
 	//Print additional header information
-	print_out("         ACCBITS: %c  LENGTH: %d\n", seg_table[seg_num + Max_Segments].access, seg_table[seg_num + Max_Segments].size);
-	print_out("         MEM ADDR  OPCODE  OPERAND\n         --------  ------  -------\n");
+	print_out("        ACCBITS: 0%x  LENGTH: %d\n", seg_table[seg_num + Max_Segments].access, seg_table[seg_num + Max_Segments].size);
+	print_out("        MEM ADDR  OPCODE  OPERAND\n        --------  ------  -------\n");
 	
 	//Display current segment of memory:
 	//Get base memory position of the first instruction in the segment
 	int base = seg_table[seg_num + Max_Segments].base;
-	
+
 	//For each instruction in the segment
-	for(base; base < base + seg_table[seg_num + Max_Segments].size; base++)
+	for(counter1 = 0; counter1 < seg_table[seg_num + Max_Segments].size; counter1++)
 	{
 		//If opcode is an instruction, look for the appropriate one in Op_Names
 		if(Mem[base].opcode < NUM_OPCODES)
 		{ 
 			//Display memory position and instruction code
-			print_out("       %d  %s\n", base, Op_Names[Mem[base].opcode]);
+			print_out("               %d  %s", base, Op_Names[Mem[base].opcode]);
 			
 			//Determine instruction type to display operand differently:			
 			//If SIO, WIO, or END instruction
@@ -645,9 +640,9 @@ Display_pgm( segment_type* seg_table, int seg_num, pcb_type* pcb )
 			{
 				//Display segment/offset pair
 				if(Mem[base].opcode == 2)
-					print_out("     %d\n", Mem[base].operand);
+					print_out("     [%d,%d]\n", Mem[base].operand.address.segment, Mem[base].operand.address.offset);
 				else if(Mem[base].opcode == 3)
-					print_out("    %d\n", Mem[base].operand);
+					print_out("    [%d,%d]\n", Mem[base].operand.address.segment, Mem[base].operand.address.offset);
 			}
 			
 			//Else, if SKIP instruction
@@ -662,19 +657,21 @@ Display_pgm( segment_type* seg_table, int seg_num, pcb_type* pcb )
 		else
 		{
 			//Look for it in devtable
-			for(counter = 0; counter < Num_Devices; counter++)
+			for(counter2 = 0; counter2 < Num_Devices; counter2++)
 			{
 				//If found the correct device ID
-				if(strcmp(Dev_Table[counter].name, Dev_Table[Mem[base].opcode - NUM_OPCODES].name) == 0)
+				if(strcmp(Dev_Table[counter2].name, Dev_Table[Mem[base].opcode - NUM_OPCODES].name) == 0)
 				{
 					//Display memory position, device name, and byte count
-					print_out("       %d  %s    %lu\n", base, Dev_Table[Mem[base].opcode - NUM_OPCODES].name, Mem[base].operand);
+					print_out("               %d  %s    %lu\n", base, Dev_Table[Mem[base].opcode - NUM_OPCODES].name, Mem[base].operand);
 				}
 			}
 		}
+		
 		//Update base memory position to go to next instruction in segment
+		base++;
 	}
-	
+	print_out("\n");
 }
 
 /**
