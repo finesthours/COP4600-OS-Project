@@ -105,7 +105,6 @@ Boot( )
 		printf("File Empty");
 		return;
 	}
-	//~ printf("memsize = %d?", Mem_Size);
 		
 	//Read segment information from boot file:
 	//For each segment in boot file
@@ -117,7 +116,7 @@ Boot( )
 		Mem_Map[currSeg + Max_Segments].access = access_bits;
 		//Set size of current segment
 		Mem_Map[currSeg + Max_Segments].size = size_of_segment;
-		//~ printf("%d, %x\n", Mem_Map[currSeg + Max_Segments].size, Mem_Map[currSeg + Max_Segments].access);
+		
 		//Go to next segment in Mem_Map
 	}
 	
@@ -128,7 +127,7 @@ Boot( )
 	{
 		//Set base pointer of segment to its location in main memory
 		Mem_Map[currSeg + Max_Segments].base = currMem;
-		//~ printf("size = %d\n numSegs = %d\n", Mem_Map[currSeg + Max_Segments].size, numSegs);
+
 		//For each instruction in the segment
 		for(currIns = 0; currIns < Mem_Map[currSeg + Max_Segments].size; currIns++)
 		{
@@ -136,15 +135,9 @@ Boot( )
 			Get_Instr( BOOT, &Mem[currMem] );
 			//Increment current position in main memory
 			currMem++;
-			//Go to next segment in Mem_Map
-			//~ printf("currmem = %d\n", currMem);
 			
+			//Go to next segment in Mem_Map			
 		}
-		//~ printf("currseg = %d\n", currSeg);
-		//~ for(test = 0; test < currMem; test++)
-		//~ {
-			//~ printf("%d. %d\n", test, Mem[test].opcode );
-		//~ }
 	}
 	
 	//Adjust size of memory since boot program is loaded into memory:
@@ -156,8 +149,6 @@ Boot( )
 	//Move location of first free memory block (Free_Mem->base)
 	Free_Mem->base += currMem;
 	
-	//~ printf("totfree = %u, freesize = %u, freemem = %u", Total_Free, Free_Mem->size, Free_Mem->base);
-	
 	//Display each segment of memory
 	for(currSeg = 0; currSeg < numSegs; currSeg++)
 	{
@@ -165,12 +156,6 @@ Boot( )
 		//Upper half of Mem_Map; pass NULL as PCB since OS has no PCB
 		Display_pgm( Mem_Map, currSeg, NULL );
 	}
-	
-	//segment_type* Mem_Map-> unsigned char access, unsigned int size, int base
-	//The upper half of Mem_Map always holds the address map for the operating system, i.e., Mem_Map[Max_Segments ... 2*Max_Segments - 1] 
-	//The lower half is reserved for user programs = Mem_Map[0 ... Max_Segments - 1]).
-	//instr_type* Mem->opcode_type opcode[], operand_type operand.unsigned long burst, unsigned long bytes, unsigned int count, addr_type address.segment, offset
-	//seg_list*  Free_Mem->unsigned int base, unsigned int size, seg_list* next
 }
 
 /**
@@ -290,8 +275,6 @@ Get_Instr( int prog_id, struct instr_type* instruction )
 			return;
 		}
 	}
-	
-	//~ printf("opcode = %s, operand = %s\n", opcode_str, operand_str);
 		
 	//If no devices matched, quit program
 	err_quit("\nNO DEVICES MATCHED\n");
@@ -378,6 +361,58 @@ Get_Instr( int prog_id, struct instr_type* instruction )
 void
 Cpu( )
 {
+	//Identify the agent ID for the currently running program:
+
+	//If CPU has no active PCB, then the program is boot
+	if(CPU.active_pcb == NULL)
+	{
+		Agent = 0;
+	}
+	//Otherwise, the program is the active process running in the CPU, so use its ID
+	//use this process's terminal position and add 1
+	//so that it does not conflict with boot.
+	else
+	{
+		Agent = 1;// + TERMINAL_POSITION?!?!?!?!
+	}
+	//Loop forever doing the following:
+	while(1)
+	{
+		//Set MAR to CPU's program counter
+		Set_MAR(CPU.state.pc);
+		//Fetch instruction at this address
+		int fetch = Fetch(&Mem[MAR]);
+		//If fetch returns a negative value, a fault has occurred, so
+		if(fetch < 0)
+		{
+			//Return
+			return;
+		}
+
+		//Determine type of instruction to execute
+			//If SIO, WIO, or END instruction
+				//If the objective is 3 or higher
+					//Increment total number of burst cycles for PCB
+				//Calculate when I/O event will occur using current time + burst time
+				//Add event to event list
+				//Increment PC by 2 to skip the next instruction--device instruction
+				//Return from Cpu() (exit from loop)
+
+			//If SKIP instruction
+				//If count > 0,
+					//Decrement count by 1
+					//Write this change to memory by calling Write()
+					//If write returns a negative value, a fault has occurred, so
+						//Return
+					//Increment the CPU's PC by 2 since the next instruction is to be skipped
+				//Otherwise, instruction count equals 0, so
+					//Increment the CPU's PC by 1 since the next instruction, JUMP, is to be executed
+				//Continue looping
+
+			//If JUMP instruction
+				//Set the PC for the CPU so that the program jumps to the address determined by the operand of instruction
+				//Continue looping
+	}
 }
 
 /**
@@ -394,6 +429,12 @@ Cpu( )
 void
 Exec_Program( struct state_type* state )
 {
+	//Copy the given state into the CPU's state
+	CPU.state = *state;
+	//~ printf("mode = %x\nseg = %d\noff = %d\n", CPU.state.mode, CPU.state.pc.segment, CPU.state.pc.offset);
+	
+	//Resume execution of the program at the new PC--just call Cpu()
+	Cpu();
 }
 
 /**
@@ -451,6 +492,8 @@ Memory_Unit( )
 void
 Set_MAR( struct addr_type* addr )
 {
+	//Set MAR to given address
+	MAR = *addr;
 }
 
 /**
