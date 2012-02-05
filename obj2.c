@@ -97,6 +97,7 @@ Boot( )
 		
 	int numSegs, size_of_segment, access_bits, currSeg, currIns, currMem = 0;
 	char buf[BUFSIZ];
+	int test = 0;
 	
 	//Read fields the "PROGRAM" and number of segments from boot file
 	if(fscanf(Prog_Files[BOOT], "%s %d", buf,&numSegs) == EOF)
@@ -113,10 +114,10 @@ Boot( )
 		//Read "SEGMENT size_of_segment access_bits" from boot file
 		fscanf(Prog_Files[BOOT], "%s %d %x", buf, &size_of_segment, &access_bits);
 		//Set access bits of current segment
-		Mem_Map[currSeg].access = access_bits;
+		Mem_Map[currSeg + Max_Segments].access = access_bits;
 		//Set size of current segment
-		Mem_Map[currSeg].size = size_of_segment;
-		//~ printf("%d, %x\n", Mem_Map[currSeg].size, Mem_Map[currSeg].access);
+		Mem_Map[currSeg + Max_Segments].size = size_of_segment;
+		//~ printf("%d, %x\n", Mem_Map[currSeg + Max_Segments].size, Mem_Map[currSeg + Max_Segments].access);
 		//Go to next segment in Mem_Map
 	}
 	
@@ -126,9 +127,9 @@ Boot( )
 	for(currSeg = 0; currSeg < numSegs; currSeg++)
 	{
 		//Set base pointer of segment to its location in main memory
-		Mem_Map[currSeg].base = currMem;
+		Mem_Map[currSeg + Max_Segments].base = currMem;
 		//For each instruction in the segment
-		for(currIns = 0; currIns < Mem_Map[currSeg].size; currIns++)
+		for(currIns = 0; currIns < Mem_Map[currSeg + Max_Segments].size; currIns++)
 		{
 			//Read instruction into memory--call Get_Instr()
 			Get_Instr( BOOT, &Mem[currMem] );
@@ -136,7 +137,6 @@ Boot( )
 			currMem++;
 			//Go to next segment in Mem_Map
 		}
-		//~ currMem += Mem_Map[currSeg].size
 	}
 	
 	//Adjust size of memory since boot program is loaded into memory:
@@ -150,16 +150,23 @@ Boot( )
 	
 	//~ printf("totfree = %u, freesize = %u, freemem = %u", Total_Free, Free_Mem->size, Free_Mem->base);
 	
+	//Display each segment of memory
+	//~ for(currSeg = 0; currSeg < numSegs; currSeg++)
+	//~ {
+		//~ //Display segment Mem_Map[i + Max_Segments] since kernel resides in
+		//~ //Upper half of Mem_Map; pass NULL as PCB since OS has no PCB
+		//~ Display_pgm( Mem_Map, currSeg, NULL );
+	//~ }
+	//~ for(test = 0; test < currMem; test++)
+	//~ {
+		//~ printf("%d. %d\n", test, Mem[test].opcode );
+	//~ }
 	
 	//segment_type* Mem_Map-> unsigned char access, unsigned int size, int base
 	//The upper half of Mem_Map always holds the address map for the operating system, i.e., Mem_Map[Max_Segments ... 2*Max_Segments - 1] 
-	//The lower half is reserved for user programs = Mem_Map[0 ... Max_Segments]).
+	//The lower half is reserved for user programs = Mem_Map[0 ... Max_Segments - 1]).
 	//instr_type* Mem->opcode_type opcode[], operand_type operand.unsigned long burst, unsigned long bytes, unsigned int count, addr_type address.segment, offset
 	//seg_list*  Free_Mem->unsigned int base, unsigned int size, seg_list* next
-	//unsigned int  Total_Free = 1000;
-	
-	//~ void Get_Instr( int prog_id, struct instr_type* instruction );
-	//~ void Display_pgm( segment_type* seg_table, int seg_num, pcb_type* pcb )
 }
 
 /**
@@ -216,13 +223,20 @@ Get_Instr( int prog_id, struct instr_type* instruction )
 {
 	char opcode_str[BUFSIZ], operand_str[BUFSIZ];
 	int counter;
-	//~ unsigned long burst = 0; /** CPU cycles for SIO, WIO, and END instructions. */
-	struct addr_type address = {0, 0}; /** Address for REQ and JUMP instructions. */
-	//~ unsigned int count = 0; /** Skip count for SKIP instruction. */
+	char *p, *q;
+	printf("\nHERE\n");
 	//~ unsigned long bytes = 0; /** Byte transfer count for devices. */
 	
 	//Read opcode and operand from file--store as strings initially Convert to uppercase so that case does not matter
 	fscanf(Prog_Files[prog_id], "%s %s", opcode_str, operand_str);
+	for (p = opcode_str; *p != '\0'; ++p)
+	{
+		*p = toupper(*p);
+	}
+	for (q = operand_str; *q != '\0'; ++q)
+	{
+		*q = toupper(*q);
+	}
 	
 	//Search all op_code IDs to determine which op_code that the opcode_str matches with
 	for(counter = 0; counter < NUM_OPCODES; counter++)
@@ -239,26 +253,22 @@ Get_Instr( int prog_id, struct instr_type* instruction )
 			if(counter == 0 || counter == 1 || counter == 5)
 			{
 				//Convert operand into burst count
-				//~ instruction->operand = burst;
-				instruction->operand.burst = 0;
+				instruction->operand.burst = strtoul(operand_str,NULL,10);
 			}
 				
 			//Else, if REQ or JUMP instruction
 			else if(counter == 2 || counter == 3)
 			{
 				//Convert operand into segment and offset pair
-				//~ instruction->operand = address;
-				instruction->operand.address = address;
+				sscanf(operand_str, "[%d, %d]", instruction->operand.address.segment, instruction->operand.address.offset);
 			}
 			
 			//Else, if SKIP instruction
 			else if(counter == 4)
 			{
 				//Convert operand into skip count
-				//~ instruction->operand = count;
-				instruction->operand.count = 0;
+				instruction->operand.count = atoi(operand_str);
 			}
-			
 			return;
 		}
 	}
@@ -274,11 +284,9 @@ Get_Instr( int prog_id, struct instr_type* instruction )
 			//Assign a unique opcode for the device (See note above)
 			instruction->opcode = counter + NUM_OPCODES; 
 			//Convert operand into number of bytes to transfer
-			//~ instruction->operand = bytes;
-			instruction->operand.bytes = 0;
+			instruction->operand.bytes = strtoul(operand_str,NULL,10);
 			return;
 		}
-		
 	}
 	
 	//~ printf("opcode = %s, operand = %s\n", opcode_str, operand_str);
@@ -581,7 +589,83 @@ Write( struct instr_type* instruction )
  */
 void
 Display_pgm( segment_type* seg_table, int seg_num, pcb_type* pcb )
-{
+{	
+	int counter;
+	//Print segment header:
+	
+	//If boot process
+	if(Objective == 2)
+	{
+		//Print "BOOT"
+		print_out("         SEGMENT #%d OF PROGRAM BOOT OF PROCESS BOOT\n", seg_num);
+	}
+	
+	//Else, if user process
+	else
+	{
+		//Print name of user's program
+		print_out("         SEGMENT #%d OF PROGRAM %s OF PROCESS BOOT\n", seg_num, Prog_Names[ pcb->script[ pcb->current_prog ] ]);
+	}
+	
+	//Print additional header information
+	print_out("         ACCBITS: %c  LENGTH: %d\n", seg_table[seg_num + Max_Segments].access, seg_table[seg_num + Max_Segments].size);
+	print_out("         MEM ADDR  OPCODE  OPERAND\n         --------  ------  -------\n");
+	
+	//Display current segment of memory:
+	//Get base memory position of the first instruction in the segment
+	int base = seg_table[seg_num + Max_Segments].base;
+	
+	//For each instruction in the segment
+	for(base; base < base + seg_table[seg_num + Max_Segments].size; base++)
+	{
+		//If opcode is an instruction, look for the appropriate one in Op_Names
+		if(Mem[base].opcode < NUM_OPCODES)
+		{ 
+			//Display memory position and instruction code
+			print_out("       %d  %s\n", base, Op_Names[Mem[base].opcode]);
+			
+			//Determine instruction type to display operand differently:			
+			//If SIO, WIO, or END instruction
+			if(Mem[base].opcode == 0 || Mem[base].opcode == 1 || Mem[base].opcode == 5)
+			{
+				//Display burst count
+				print_out("     %lu\n", Mem[base].operand);
+			}
+			
+			//Else, if REQ or JUMP instruction
+			else if(Mem[base].opcode == 2 || Mem[base].opcode == 3)
+			{
+				//Display segment/offset pair
+				if(Mem[base].opcode == 2)
+					print_out("     %d\n", Mem[base].operand);
+				else if(Mem[base].opcode == 3)
+					print_out("    %d\n", Mem[base].operand);
+			}
+			
+			//Else, if SKIP instruction
+			else if(Mem[base].opcode == 4)
+			{
+				//Display skip count
+				print_out("    %d\n", Mem[base].operand);
+			}		
+		}
+		
+		//Else, opcode is a device
+		else
+		{
+			//Look for it in devtable
+			for(counter = 0; counter < Num_Devices; counter++)
+			{
+				//If found the correct device ID
+				if(strcmp(Dev_Table[counter].name, Dev_Table[Mem[base].opcode - NUM_OPCODES].name) == 0)
+				{
+					//Display memory position, device name, and byte count
+					print_out("       %d  %s    %lu\n", base, Dev_Table[Mem[base].opcode - NUM_OPCODES].name, Mem[base].operand);
+				}
+			}
+		}
+		//Update base memory position to go to next instruction in segment
+	}
 }
 
 /**
