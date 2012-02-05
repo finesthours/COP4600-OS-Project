@@ -128,6 +128,7 @@ Boot( )
 	{
 		//Set base pointer of segment to its location in main memory
 		Mem_Map[currSeg + Max_Segments].base = currMem;
+		//~ printf("size = %d\n numSegs = %d\n", Mem_Map[currSeg + Max_Segments].size, numSegs);
 		//For each instruction in the segment
 		for(currIns = 0; currIns < Mem_Map[currSeg + Max_Segments].size; currIns++)
 		{
@@ -136,7 +137,14 @@ Boot( )
 			//Increment current position in main memory
 			currMem++;
 			//Go to next segment in Mem_Map
+			//~ printf("currmem = %d\n", currMem);
+			
 		}
+		//~ printf("currseg = %d\n", currSeg);
+		//~ for(test = 0; test < currMem; test++)
+		//~ {
+			//~ printf("%d. %d\n", test, Mem[test].opcode );
+		//~ }
 	}
 	
 	//Adjust size of memory since boot program is loaded into memory:
@@ -151,16 +159,17 @@ Boot( )
 	//~ printf("totfree = %u, freesize = %u, freemem = %u", Total_Free, Free_Mem->size, Free_Mem->base);
 	
 	//Display each segment of memory
-	//~ for(currSeg = 0; currSeg < numSegs; currSeg++)
-	//~ {
-		//~ //Display segment Mem_Map[i + Max_Segments] since kernel resides in
-		//~ //Upper half of Mem_Map; pass NULL as PCB since OS has no PCB
+	for(currSeg = 0; currSeg < numSegs; currSeg++)
+	{
+		//Display segment Mem_Map[i + Max_Segments] since kernel resides in
+		//Upper half of Mem_Map; pass NULL as PCB since OS has no PCB
 		//~ Display_pgm( Mem_Map, currSeg, NULL );
-	//~ }
-	//~ for(test = 0; test < currMem; test++)
-	//~ {
-		//~ printf("%d. %d\n", test, Mem[test].opcode );
-	//~ }
+	}
+	
+	for(test = 0; test < currMem; test++)
+	{
+		printf("%d. %d\n", test, Mem[test].opcode );
+	}
 	
 	//segment_type* Mem_Map-> unsigned char access, unsigned int size, int base
 	//The upper half of Mem_Map always holds the address map for the operating system, i.e., Mem_Map[Max_Segments ... 2*Max_Segments - 1] 
@@ -224,8 +233,6 @@ Get_Instr( int prog_id, struct instr_type* instruction )
 	char opcode_str[BUFSIZ], operand_str[BUFSIZ];
 	int counter;
 	char *p, *q;
-	printf("\nHERE\n");
-	//~ unsigned long bytes = 0; /** Byte transfer count for devices. */
 	
 	//Read opcode and operand from file--store as strings initially Convert to uppercase so that case does not matter
 	fscanf(Prog_Files[prog_id], "%s %s", opcode_str, operand_str);
@@ -260,7 +267,7 @@ Get_Instr( int prog_id, struct instr_type* instruction )
 			else if(counter == 2 || counter == 3)
 			{
 				//Convert operand into segment and offset pair
-				sscanf(operand_str, "[%d, %d]", instruction->operand.address.segment, instruction->operand.address.offset);
+				sscanf(operand_str, "[%d, %d]", &instruction->operand.address.segment, &instruction->operand.address.offset);
 			}
 			
 			//Else, if SKIP instruction
@@ -590,6 +597,7 @@ Write( struct instr_type* instruction )
 void
 Display_pgm( segment_type* seg_table, int seg_num, pcb_type* pcb )
 {	
+	
 	int counter;
 	//Print segment header:
 	
@@ -666,6 +674,7 @@ Display_pgm( segment_type* seg_table, int seg_num, pcb_type* pcb )
 		}
 		//Update base memory position to go to next instruction in segment
 	}
+	
 }
 
 /**
