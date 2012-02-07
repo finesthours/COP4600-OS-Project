@@ -373,15 +373,16 @@ Cpu( )
 	//so that it does not conflict with boot.
 	else
 	{
-		Agent = 1;// + TERMINAL_POSITION?!?!?!?!
+		Agent = CPU.active_pcb.term_pos + 1;
 	}
 	//Loop forever doing the following:
 	while(1)
 	{
+		instr_type instruction;
 		//Set MAR to CPU's program counter
 		Set_MAR(CPU.state.pc);
 		//Fetch instruction at this address
-		int fetch = Fetch(&Mem[MAR]);
+		int fetch = Fetch(&instruction);
 		//If fetch returns a negative value, a fault has occurred, so
 		if(fetch < 0)
 		{
@@ -390,28 +391,63 @@ Cpu( )
 		}
 
 		//Determine type of instruction to execute
-			//If SIO, WIO, or END instruction
-				//If the objective is 3 or higher
-					//Increment total number of burst cycles for PCB
-				//Calculate when I/O event will occur using current time + burst time
-				//Add event to event list
-				//Increment PC by 2 to skip the next instruction--device instruction
-				//Return from Cpu() (exit from loop)
+		
+		//If SIO, WIO, or END instruction
+		if(instruction.opcode == 0 || instruction.opcode == 1 || instruction.opcode == 5)
+		{
+			//If the objective is 3 or higher
+			if(Objective >= 3)
+			{
+				//Increment total number of burst cycles for PCB
+			}
+			
+			//Calculate when I/O event will occur using current time + burst time
+			//~ int timeIO = Clock + ;
+			//Add event to event list
+			Add_Event(instruction.opcode, Agent, {0,0});
+			//Increment PC by 2 to skip the next instruction--device instruction
+			CPU.state.pc += 2;
+			//Return from Cpu() (exit from loop)
+			return;
+		}
 
-			//If SKIP instruction
-				//If count > 0,
-					//Decrement count by 1
-					//Write this change to memory by calling Write()
-					//If write returns a negative value, a fault has occurred, so
-						//Return
-					//Increment the CPU's PC by 2 since the next instruction is to be skipped
-				//Otherwise, instruction count equals 0, so
-					//Increment the CPU's PC by 1 since the next instruction, JUMP, is to be executed
-				//Continue looping
+		//If SKIP instruction
+		if(instruction.opcode == 4)
+		{
+			//If count > 0,
+			if(instruction.operand.count > 0)
+			{
+				//Decrement count by 1
+				instruction.operand.count--;
+				
+				//Write this change to memory by calling Write()
+				int write = Write(&instruction);
+				//If write returns a negative value, a fault has occurred, so
+				if(write < 0)
+				{
+					//Return
+					return;
+				}
+				//Increment the CPU's PC by 2 since the next instruction is to be skipped
+				CPU.state.pc += 2;
+			}
+			
+			//Otherwise, instruction count equals 0, so
+			else
+			{
+				//Increment the CPU's PC by 1 since the next instruction, JUMP, is to be executed
+				CPU.state.pc++;
+			}
+			//Continue looping
+		}
 
-			//If JUMP instruction
-				//Set the PC for the CPU so that the program jumps to the address determined by the operand of instruction
-				//Continue looping
+		//If JUMP instruction
+		if(instruction.opcode == 3)
+		{
+			//Set the PC for the CPU so that the program jumps to the address determined by the operand of instruction
+			CPU.state.pc = {instruction.operand.address.segment, instruction.operand.address.offset};
+			//Continue looping
+		}
 	}
 }
 
@@ -472,8 +508,48 @@ Exec_Program( struct state_type* state )
 int
 Memory_Unit( )
 {
-	// temporary return value
-	return( 0 );
+	//Set segment to the segment saved in the MAR:
+	int currSeg, currAddress;
+	//If in kernel mode (CPU's mode equals 1)
+	if(CPU.state.mode == 1)
+	{
+		//Set segment to be in upper half of Mem_Map (MAR.segment+Max_Segments)
+		currSeg = MAR.segment + Max_Segments;
+	}
+	
+	//Otherwise, in user mode (CPU's mode equals 0)
+	else
+	{
+		//Just use lower half of Mem_Map (MAR.segment)
+		currSeg = MAR.segment;
+	}
+	
+	//If illegal memory access (access == 0)
+	if(Mem_Map[currSeg].access == 0)
+	{
+		//Create seg. fault event at the current time using the CPU's active process's terminal position (+ 1) as the agent ID
+		Add_Event(SEGFAULT_EVT, CPU.active_pcb.term_pos + 1, {0,0});
+		
+		//Return -1
+		return -1;
+	}
+
+	//If address is out of the bounds
+	if(currSeg > Max_Segments)
+	{
+		//Create address fault event at the current time using the CPU's active process's terminal position (+ 1) as the agent ID
+		Add_Event(ADRFAULT_EVT, CPU.active_pcb.term_pos + 1, {0,0});
+		//Return -1
+		return -1;
+	}
+	
+	//Compute physical memory address:
+	
+	//Address = base address from segment in Mem_Map + offset saved in MAR
+	currAddress = Mem_Map[currSeg].base + MAR.offset;
+	
+	//Return address
+	return currAddress;
 }
 
 /**
@@ -518,8 +594,22 @@ Set_MAR( struct addr_type* addr )
 int
 Fetch( struct instr_type* instruction )
 {
-	// temporary return value
-	return( 0 );
+	int physAddr;
+	//Get current physical memory address--call Memory_Unit()
+	physAddr = Memory_Unit();
+	
+	//If returned address < 0, then a fault occurred
+	if(physAddr < 0)
+	{
+		//Return -1
+		return -1;
+	}
+	
+	//Set given instruction to instruction in memory at the current memory address
+	*instruction = Mem[physAddr];
+	
+	//Return 1 to signify that no errors occurred
+	return 1;
 }
 
 /**
@@ -544,8 +634,22 @@ Fetch( struct instr_type* instruction )
 int
 Read( struct instr_type* instruction )
 {
-	// temporary return value
-	return( 0 );
+	int physAddr;
+	//Get current physical memory address--call Memory_Unit()
+	physAddr = Memory_Unit();
+	
+	//If returned address < 0, then a fault occurred
+	if(physAddr < 0)
+	{
+		//Return -1
+		return -1;
+	}
+	
+	//Set given instruction to instruction in memory at the current memory address
+	*instruction = Mem[physAddr];
+	
+	//Return 1 to signify that no errors occurred
+	return 1;
 }
 
 /**
@@ -567,8 +671,22 @@ Read( struct instr_type* instruction )
 int
 Write( struct instr_type* instruction )
 {
-	// temporary return value
-	return( 0 );
+	int physAddr;
+	//Get current physical memory address--call Memory_Unit()
+	physAddr = Memory_Unit();
+	
+	//If returned address < 0, then a fault occurred
+	if(physAddr < 0)
+	{
+		//Return -1
+		return -1;
+	}
+	
+	//Set instruction in memory at the current memory address to given instruction
+	Mem[physAddr] = *instruction;
+	
+	//Return 1 to signify that no errors occurred
+	return 1;
 }
 
 /**
