@@ -374,7 +374,7 @@ Cpu( )
 	//so that it does not conflict with boot.
 	else
 	{
-		Agent = CPU.active_pcb->term_pos++;
+		Agent = CPU.active_pcb->term_pos + 1;
 	}
 	//Loop forever doing the following:
 	while(1)
@@ -406,7 +406,7 @@ Cpu( )
 			//Calculate when I/O event will occur using current time = clock + burst time 
 			Burst_time(CPU.CPU_burst, &eventTime);
 			Add_time(&Clock, &eventTime);
-			//~ int timeIO = Clock + ;
+
 			//Add event to event list
 			Add_Event(instruction.opcode, Agent, &eventTime);
 			//Increment PC by 2 to skip the next instruction--device instruction
@@ -515,7 +515,7 @@ Memory_Unit( )
 {
 	//Set segment to the segment saved in the MAR:
 	int currSeg, currAddress;
-	time_type eventTime = {0,0};
+
 	//If in kernel mode (CPU's mode equals 1)
 	if(CPU.state.mode == 1)
 	{
@@ -534,7 +534,7 @@ Memory_Unit( )
 	if(Mem_Map[currSeg].access == 0)
 	{
 		//Create seg. fault event at the current time using the CPU's active process's terminal position (+ 1) as the agent ID
-		Add_Event(SEGFAULT_EVT, CPU.active_pcb->term_pos + 1, &eventTime);
+		Add_Event(SEGFAULT_EVT, CPU.active_pcb->term_pos + 1, &Clock);
 		
 		//Return -1
 		return -1;
@@ -544,7 +544,7 @@ Memory_Unit( )
 	if(currSeg > Max_Segments)
 	{
 		//Create address fault event at the current time using the CPU's active process's terminal position (+ 1) as the agent ID
-		Add_Event(ADRFAULT_EVT, CPU.active_pcb->term_pos + 1, &eventTime);
+		Add_Event(ADRFAULT_EVT, CPU.active_pcb->term_pos + 1, &Clock);
 		//Return -1
 		return -1;
 	}
