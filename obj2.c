@@ -361,6 +361,7 @@ Get_Instr( int prog_id, struct instr_type* instruction )
 void
 Cpu( )
 {
+	time_type eventTime = {0,0};
 	//Identify the agent ID for the currently running program:
 
 	//If CPU has no active PCB, then the program is boot
@@ -373,14 +374,14 @@ Cpu( )
 	//so that it does not conflict with boot.
 	else
 	{
-		Agent = CPU.active_pcb.term_pos + 1;
+		Agent = CPU.active_pcb->term_pos++;
 	}
 	//Loop forever doing the following:
 	while(1)
 	{
 		instr_type instruction;
 		//Set MAR to CPU's program counter
-		Set_MAR(CPU.state.pc);
+		Set_MAR(&CPU.state.pc);
 		//Fetch instruction at this address
 		int fetch = Fetch(&instruction);
 		//If fetch returns a negative value, a fault has occurred, so
@@ -399,14 +400,17 @@ Cpu( )
 			if(Objective >= 3)
 			{
 				//Increment total number of burst cycles for PCB
+				CPU.active_pcb->sjnburst++;
 			}
 			
-			//Calculate when I/O event will occur using current time + burst time
+			//Calculate when I/O event will occur using current time = clock + burst time 
+			Burst_time(CPU.CPU_burst, &eventTime);
+			Add_time(&Clock, &eventTime);
 			//~ int timeIO = Clock + ;
 			//Add event to event list
-			Add_Event(instruction.opcode, Agent, {0,0});
+			Add_Event(instruction.opcode, Agent, &eventTime);
 			//Increment PC by 2 to skip the next instruction--device instruction
-			CPU.state.pc += 2;
+			CPU.state.pc.offset += 2;
 			//Return from Cpu() (exit from loop)
 			return;
 		}
@@ -429,14 +433,14 @@ Cpu( )
 					return;
 				}
 				//Increment the CPU's PC by 2 since the next instruction is to be skipped
-				CPU.state.pc += 2;
+				CPU.state.pc.offset += 2;
 			}
 			
 			//Otherwise, instruction count equals 0, so
 			else
 			{
 				//Increment the CPU's PC by 1 since the next instruction, JUMP, is to be executed
-				CPU.state.pc++;
+				CPU.state.pc.offset++;
 			}
 			//Continue looping
 		}
@@ -445,7 +449,8 @@ Cpu( )
 		if(instruction.opcode == 3)
 		{
 			//Set the PC for the CPU so that the program jumps to the address determined by the operand of instruction
-			CPU.state.pc = {instruction.operand.address.segment, instruction.operand.address.offset};
+			CPU.state.pc.segment = instruction.operand.address.segment;
+			CPU.state.pc.offset = instruction.operand.address.offset;
 			//Continue looping
 		}
 	}
@@ -510,6 +515,7 @@ Memory_Unit( )
 {
 	//Set segment to the segment saved in the MAR:
 	int currSeg, currAddress;
+	time_type eventTime = {0,0};
 	//If in kernel mode (CPU's mode equals 1)
 	if(CPU.state.mode == 1)
 	{
@@ -528,7 +534,7 @@ Memory_Unit( )
 	if(Mem_Map[currSeg].access == 0)
 	{
 		//Create seg. fault event at the current time using the CPU's active process's terminal position (+ 1) as the agent ID
-		Add_Event(SEGFAULT_EVT, CPU.active_pcb.term_pos + 1, {0,0});
+		Add_Event(SEGFAULT_EVT, CPU.active_pcb->term_pos + 1, &eventTime);
 		
 		//Return -1
 		return -1;
@@ -538,7 +544,7 @@ Memory_Unit( )
 	if(currSeg > Max_Segments)
 	{
 		//Create address fault event at the current time using the CPU's active process's terminal position (+ 1) as the agent ID
-		Add_Event(ADRFAULT_EVT, CPU.active_pcb.term_pos + 1, {0,0});
+		Add_Event(ADRFAULT_EVT, CPU.active_pcb->term_pos + 1, &eventTime);
 		//Return -1
 		return -1;
 	}
