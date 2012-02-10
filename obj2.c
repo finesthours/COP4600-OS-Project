@@ -362,6 +362,9 @@ void
 Cpu( )
 {
 	time_type eventTime = {0,0};
+	int counter;
+	instr_type *instruction;
+	instruction = (instr_type *) malloc(sizeof(instr_type));
 	//Identify the agent ID for the currently running program:
 
 	//If CPU has no active PCB, then the program is boot
@@ -378,12 +381,13 @@ Cpu( )
 	}
 	//Loop forever doing the following:
 	while(1)
+	//~ for(counter = 0; counter < 3; counter++)
 	{
-		instr_type instruction;
+		
 		//Set MAR to CPU's program counter
 		Set_MAR(&CPU.state.pc);
 		//Fetch instruction at this address
-		int fetch = Fetch(&instruction);
+		int fetch = Fetch(instruction);
 		//If fetch returns a negative value, a fault has occurred, so
 		if(fetch < 0)
 		{
@@ -394,7 +398,7 @@ Cpu( )
 		//Determine type of instruction to execute
 		
 		//If SIO, WIO, or END instruction
-		if(instruction.opcode == 0 || instruction.opcode == 1 || instruction.opcode == 5)
+		if(instruction->opcode == 0 || instruction->opcode == 1 || instruction->opcode == 5)
 		{
 			//If the objective is 3 or higher
 			if(Objective >= 3)
@@ -404,11 +408,18 @@ Cpu( )
 			}
 			
 			//Calculate when I/O event will occur using current time = clock + burst time 
-			Burst_time(CPU.CPU_burst, &eventTime);
+			Burst_time(instruction->operand.burst, &eventTime);
 			Add_time(&Clock, &eventTime);
 
 			//Add event to event list
-			Add_Event(instruction.opcode, Agent, &eventTime);
+			int eventID;
+			if(instruction->opcode == 0)
+				eventID = 1;
+			else if(instruction->opcode == 1)
+				eventID = 2;
+			else
+				eventID = 4;
+			Add_Event(eventID, Agent, &eventTime);
 			//Increment PC by 2 to skip the next instruction--device instruction
 			CPU.state.pc.offset += 2;
 			//Return from Cpu() (exit from loop)
@@ -416,16 +427,16 @@ Cpu( )
 		}
 
 		//If SKIP instruction
-		if(instruction.opcode == 4)
+		if(instruction->opcode == 4)
 		{
 			//If count > 0,
-			if(instruction.operand.count > 0)
+			if(instruction->operand.count > 0)
 			{
 				//Decrement count by 1
-				instruction.operand.count--;
+				instruction->operand.count--;
 				
 				//Write this change to memory by calling Write()
-				int write = Write(&instruction);
+				int write = Write(instruction);
 				//If write returns a negative value, a fault has occurred, so
 				if(write < 0)
 				{
@@ -446,11 +457,11 @@ Cpu( )
 		}
 
 		//If JUMP instruction
-		if(instruction.opcode == 3)
+		if(instruction->opcode == 3)
 		{
 			//Set the PC for the CPU so that the program jumps to the address determined by the operand of instruction
-			CPU.state.pc.segment = instruction.operand.address.segment;
-			CPU.state.pc.offset = instruction.operand.address.offset;
+			CPU.state.pc.segment = instruction->operand.address.segment;
+			CPU.state.pc.offset = instruction->operand.address.offset;
 			//Continue looping
 		}
 	}
@@ -541,7 +552,7 @@ Memory_Unit( )
 	}
 
 	//If address is out of the bounds
-	if(currSeg > Max_Segments)
+	if(currSeg > (Max_Segments*2 - 1))
 	{
 		//Create address fault event at the current time using the CPU's active process's terminal position (+ 1) as the agent ID
 		Add_Event(ADRFAULT_EVT, CPU.active_pcb->term_pos + 1, &Clock);
