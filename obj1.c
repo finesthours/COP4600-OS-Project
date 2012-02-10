@@ -206,22 +206,31 @@ Interrupt( )
 		Event_List->prev = NULL;
 		
 	//Set Clock, Agent and Event to the respective fields in the removed event
-	time = node->time;
-	agent = node->agent;
-	event = node->event;
+	//~ time = node->time;
+	//~ agent = node->agent;
+	//~ event = node->event;
+	
+	Clock.seconds = node->time.seconds;
+	Clock.nanosec = node->time.nanosec;
+	Agent = node->agent;
+	Event = node->event;
+
 	
 	//Write the event to the output file--call write_event()
-	Write_Event( event, agent, &time );
+	//~ Write_Event( event, agent, &time );
+	Write_Event( Event, Agent, &Clock);
 	
 	//Deallocate the removed event item
 	free(node);
 	
 	//Save CPU.mode and CPU.pc into Old_State.
-	Old_State = CPU.state;
+	Old_State.mode = CPU.state.mode;
+	Old_State.pc = CPU.state.pc;
 	
 	//Change New_State to CPU.mode and CPU.pc
-	CPU.state = New_State;
-	//~ printf("\n\nINTERRUPT!!!\n\n");
+	New_State.mode = CPU.state.mode;
+	New_State.pc = CPU.state.pc;
+
 }
 
 /**

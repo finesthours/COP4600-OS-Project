@@ -361,10 +361,11 @@ Get_Instr( int prog_id, struct instr_type* instruction )
 void
 Cpu( )
 {
-	time_type eventTime = {0,0};
+	time_type *eventTime;
 	int counter;
 	instr_type *instruction;
 	instruction = (instr_type *) malloc(sizeof(instr_type));
+	eventTime = (time_type *) malloc(sizeof(time_type));
 	//Identify the agent ID for the currently running program:
 
 	//If CPU has no active PCB, then the program is boot
@@ -408,18 +409,24 @@ Cpu( )
 			}
 			
 			//Calculate when I/O event will occur using current time = clock + burst time 
-			Burst_time(instruction->operand.burst, &eventTime);
-			Add_time(&Clock, &eventTime);
+			Burst_time(instruction->operand.burst, eventTime);
+			Add_time(&Clock, eventTime);
 
 			//Add event to event list
 			int eventID;
-			if(instruction->opcode == 0)
-				eventID = 1;
-			else if(instruction->opcode == 1)
-				eventID = 2;
-			else
-				eventID = 4;
-			Add_Event(eventID, Agent, &eventTime);
+			switch(instruction->opcode)
+			{
+				case SIO_OP:
+					eventID = SIO_EVT;
+					break;
+				case WIO_OP:
+					eventID = WIO_EVT;
+					break;
+				case END_OP:
+					eventID = END_EVT;
+					break;
+			}
+			Add_Event(eventID, Agent, eventTime);
 			//Increment PC by 2 to skip the next instruction--device instruction
 			CPU.state.pc.offset += 2;
 			//Return from Cpu() (exit from loop)
@@ -427,7 +434,7 @@ Cpu( )
 		}
 
 		//If SKIP instruction
-		if(instruction->opcode == 4)
+		else if(instruction->opcode == 4)
 		{
 			//If count > 0,
 			if(instruction->operand.count > 0)
@@ -457,7 +464,7 @@ Cpu( )
 		}
 
 		//If JUMP instruction
-		if(instruction->opcode == 3)
+		else if(instruction->opcode == 3)
 		{
 			//Set the PC for the CPU so that the program jumps to the address determined by the operand of instruction
 			CPU.state.pc.segment = instruction->operand.address.segment;
