@@ -406,6 +406,7 @@ Cpu( )
 			{
 				//Increment total number of burst cycles for PCB
 				CPU.active_pcb->sjnburst++;
+				//~ CPU.active_pcb->sjnburst += instruction->operand.burst;
 			}
 			
 			//Calculate when I/O event will occur using current time = clock + burst time 

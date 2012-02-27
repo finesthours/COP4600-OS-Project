@@ -57,6 +57,53 @@ void print_free_list( );
 void
 Logon_Service( )
 {
+	//Allocate new Process Control Block with all fields initialized to 0
+	pcb_type *newPCB = NULL;
+	newPCB = calloc(1, sizeof(pcb_type));
+	//~ memset(PCB, 0, sizeof(PCB));
+
+	//Initialize specific PCB fields:
+	//Mark status as new
+	newPCB->status = NEW_PCB;
+	//Save terminal table position
+	//~ newPCB->term_pos = ;
+	//Set logon time
+	newPCB->logon_time = Clock;
+	//Set user name 
+	char agentId[3];
+	char agentName[5] = "U0";
+	sprintf(agentId, "0%d", Agent);
+	strcat(agentName,agentId);
+	agentName[strlen(agentName)] = '\0';
+	strcpy(newPCB->username, agentName);
+	//Save PCB in global terminal table
+	//~ Term_Table[] = newPCB;
+	
+	//Initialize list of programs user will run--call Get_Script()
+	Get_Script(newPCB);
+	//Execute first program of PCB--call Next_pgm()
+	if(Next_pgm(newPCB) == 0)
+	{
+         err_quit("Transition to next program unsuccessful");
+    }
+	//If objective 4 or higher, set scheduling flags:
+	if(Objective >= 4)
+	{
+		//If no process is active in the CPU currently
+		if(CPU.active_pcb == NULL)
+		{
+			//Turn off scheduling and CPU switches
+			SCHED_SW = OFF;
+            CPU_SW = OFF;
+		}
+		//Otherwise,
+		else
+		{
+			//Turn on switches
+			SCHED_SW = ON;
+            CPU_SW = ON;
+		}
+	}
 }
 
 /**
@@ -102,6 +149,39 @@ Logon_Service( )
 void
 Get_Script( pcb_type *pcb )
 {
+	char scriptIn[BUFSIZ];
+	int progIndex, scriptIndex = 0;
+	
+	//Allocate PCB's array of scripts
+	prog_type *scriptArray;
+	scriptArray = (prog_type *) malloc(sizeof(prog_type)*Max_Num_Scripts);
+	//Mark index of first script
+	pcb->current_prog = 0;
+
+	//Read each script name in file
+	do
+	{
+		fscanf(Script_fp, "%s", scriptIn);
+		//Capitalize script name so that case does not matter
+		*scriptIn = toupper(*scriptIn);
+
+		//Output name of the script to output file
+		print_out("%s ",scriptIn);
+		
+		//Determine script ID for script name read
+		for(progIndex = 0; progIndex < NUM_PROGRAMS; progIndex++)
+		{
+			//Compare script name to each name in Prog_Names array
+			//If names match
+			if(strcmp(scriptIn, Prog_Names[progIndex]) == 0)
+			{
+			//Mark ID in PCB's scripts array
+				scriptArray[scriptIndex] = progIndex;
+				break;
+			}
+		}
+		scriptIndex++;
+	}while(strcmp(scriptIn,"LOGOFF")!=0)	//Stop reading script names when "LOGOFF" script name encountered
 }
 
 /**
@@ -155,8 +235,70 @@ Get_Script( pcb_type *pcb )
 int
 Next_pgm( pcb_type* pcb )
 {
-	// temporary return value
-	return( 0 );
+	time_type currTime = Clock;
+	//If the next program is not the first program the user will run
+		//And
+	//No unserviced I/O request blocks exist
+	if(pcb->current_prog != 0 && pcb->rb_q == NULL)
+	{
+		//Deallocate memory used for the previous program--call Dealloc_pgm()
+		Dealloc_pgm(pcb);
+	}
+
+	//If process has an unserviced I/O request block
+	if(pcb->rb_q != NULL)
+	{
+		//Do not load a new program
+		return 0;
+	}
+		
+	//If encountered last program script
+	if(pcb->script[pcb->current_prog] == LOGOFF)
+	{
+		//Mark PCB as terminated and do not load another program
+		pcb->status = TERMINATED_PCB;
+		
+		//Calculate total time logged on
+		//~ Diff_time(&pcb->logon_time, &currTime);
+		//~ Add_time(&currTime, &(pcb->total_logon_time));
+		return 0;
+	}
+
+	//Allocate and initialize a new segment table for the PCB's program--call Get_Memory()
+	Get_Memory(pcb);
+	
+	//If failed to allocate space (pcb->seg_table is NULL)
+	if(pcb->seg_table == NULL)
+	{
+		//Do not load another program
+		return 0;
+	}
+
+	//Load the next program into memory--call Loader()
+	Loader(pcb);
+	
+	//Clear (set to 0) PCB's area for saving CPU information during an interrupt
+	pcb->cpu_save.mode = 0;
+	pcb->cpu_save.pc.segment = 0;
+	pcb->cpu_save.pc.offset = 0;
+	
+	//Mark PCB as ready to run
+	pcb->status = READY_PCB;
+
+	//If objective 4 or greater
+	if(Objective >= 4)
+	{
+		//Insert process into CPU's ready queue 
+		if(CPU.ready_q!=NULL)
+			CPU.ready_q->next = pcb;
+		else
+			CPU.ready_q->pcb = pcb;
+	}
+
+	//Increment index position of program script for next call to Next_pgm()
+	pcb->current_prog = pcb->current_prog + 1;
+	
+	return 1;
 }
 
 /**
@@ -308,6 +450,20 @@ Alloc_seg( int size )
 void
 Loader( pcb_type* pcb )
 {
+	int currSeg, currInst;
+	
+	//For each segment in the user's segment table
+	for(currSeg = 0; currSeg < pcb->num_segments; currSeg++)
+	{
+		//For each instruction in the segment
+		for(currInst = 0; currInst < pcb->seg_table[currSeg].size; currInst++)
+		{
+			//Read instruction from program file into memory--call Get_Instr()
+			Get_Instr(pcb->script[pcb->current_prog], &Mem[pcb->seg_table[currSeg].base + currInst])
+		}
+		//Display each segment of program
+		Display_pgm(pcb->seg_table, currSeg, pcb);
+	}
 }
 
 /**
@@ -326,6 +482,15 @@ Loader( pcb_type* pcb )
 void
 Dealloc_pgm( pcb_type* pcb )
 {
+	int currSeg;
+	//For each segment
+	for(currSeg = 0; currSeg < pcb->num_segments; currSeg++)
+	{
+		//Deallocate the segment--call Dealloc_seg()
+		Dealloc_seg(pcb->seg_table[currSeg].base, pcb->seg_table[currSeg].size);
+	}
+	//Free segment table
+	free(pcb->seg_table);
 }
 
 /**
@@ -471,6 +636,11 @@ End_Service( )
 void
 Abend_Service( )
 {
+	//Print output message indicating that process was terminated due to some abnormal condition
+	print_out("Process terminated due to some abnormal condition\n");
+    
+	//Call End_Service() to handle terminating process.
+	End_Service();
 }
 
 /**
@@ -488,6 +658,15 @@ Abend_Service( )
  */
 void print_free_list( )
 {
+	int currBlock = 0;
+	seg_list* currNode = Free_Mem;
+	//For each free block
+	while(currNode)
+	{
+		//Print base position and last position in block
+		printf("Free Block: %d Base: %d End: %d\n", currBlock, Free_Mem->base, (Free_Mem->base + Free_Mem->size - 1));
+		currNode = currNode->next;
+	}
 }
 
 /**
