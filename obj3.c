@@ -58,7 +58,7 @@ void
 Logon_Service( )
 {
 	//Allocate new Process Control Block with all fields initialized to 0
-	pcb_type *newPCB = NULL;
+	pcb_type *newPCB;
 	newPCB = calloc(1, sizeof(pcb_type));
 	//~ memset(PCB, 0, sizeof(PCB));
 
@@ -361,6 +361,61 @@ Next_pgm( pcb_type* pcb )
 void
 Get_Memory( pcb_type* pcb )
 {
+	int numSegs, size_of_segment, access_bits, currSeg, currIns, progSize = 0, baseMem;
+	int currProg = pcb->script[ pcb->current_prog ];
+	char buf[BUFSIZ];
+	
+	//Read the fields "PROGRAM" and number of segments from program file
+	if(fscanf(Prog_Files[currProg], "%s %d", buf,&numSegs) == EOF)
+	{
+		printf("File Empty");
+		return;
+	}
+	
+	//Allocate pcb's segment table
+	pcb->num_segments = numSegs;
+	pcb->seg_table = calloc(numSegs, sizeof(segment_type));
+
+	//Read segment table information from program file:
+	//For each segment in user's program
+	for(currSeg = 0; currSeg < numSegs; currSeg++)
+	{
+		//Read "SEGMENT size_of_segment access_bits" from program file
+		fscanf(Prog_Files[currProg], "%s %d %x", buf, &size_of_segment, &access_bits);
+		//Set size of current segment
+		pcb->seg_table[currSeg].size = size_of_segment;
+		//Set access bits of current segment
+		pcb->seg_table[currSeg].access = access_bits;
+		//Increment amount of memory used
+		Total_Free -= pcb->seg_table[currSeg].size;
+		
+		progSize += pcb->seg_table[currSeg].size;
+		//Go to next segment in user's segment table
+	}
+
+	//If program cannot fit into memory (total amount of free space < needed size)
+	if(Total_Free < progSize)
+	{
+		//Clear user's segment table, which marks allocation failure
+		free(pcb->seg_table);
+		pcb->seg_table = NULL;
+		//Return without allocating a segment
+		return;
+	}
+
+	//Allocate each segment:
+	//For each segment
+	for(currSeg = 0; currSeg < numSegs; currSeg++)
+	{
+		//Try to allocate a new segment and save returned base pointer position--call Alloc_seg()
+		baseMem = Alloc_seg(pcb-seg_table[currSeg].size);
+		//If no space was available (invalid position returned)
+		if(baseMem < 0)
+		{
+			//Compact memory to eliminate external fragmentation and try to get the base pointer again--call Alloc_seg()
+			return;
+		}
+	}
 }
 
 /**
@@ -415,8 +470,68 @@ Get_Memory( pcb_type* pcb )
 int
 Alloc_seg( int size )
 {
-	// temporary return value
-	return( 0 );
+	seg_list *currBlock, *old;
+	int segment_base;
+	currBlock = Free_Mem;
+	//Search free list for a block large enough to hold the segment
+	while(currBlock)
+	{
+		//If block is large enough to hold segment
+		if(currBlock->size >= size)
+		{
+			//Stop searching
+			break;
+		}
+		old = currBlock;	
+		currBlock = currBlock->next;
+	}
+
+	//If no block was large enough
+	if(currBlock == NULL)
+	{
+		//Return invalid position
+		return -1;
+	}
+
+	//Else, if block is an exact fit
+	else if(currBlock->size == size)
+	{
+		//Use free block's base address for segment
+		segment_base = currBlock->base;
+		//If block is first in list
+		if(currBlock->next == NULL)
+		{
+			//Set the head of the free list to the next node
+			Free_Mem = currBlock->next;
+		}
+		//Else, segment is in middle or at end of list
+		else
+		{
+			//By-pass removed node in list
+			old->next = currBlock-next;
+		}
+
+		//Delete node
+		free(currBlock);
+		//Decrement total amount of free memory
+		Total_Free -= size;
+	}
+	//Else, if block is larger than needed
+	else if(currBlock->size > size)
+	{
+		//Use free block's base address for segment
+		segment_base = currBlock->base;
+		
+		//Adjust node's size and starting position:
+		//Increment base address and decrement block size by given size
+		currBlock->base += size;
+        currBlock->size -= size;
+		
+		//Decrement total amount of free memory
+		Total_Free -= size;
+	}
+
+	return segment_base;
 }
 
 /**
@@ -529,6 +644,61 @@ Dealloc_pgm( pcb_type* pcb )
 void
 Dealloc_seg( int base, int size )
 {
+	seg_list *newSeg, *currSeg, *old;
+	//Allocate and initialize a new free segment
+	newSeg = (seg_list*) malloc(sizeof(seg_list));
+	newSeg->base = base;
+	newSeg->size = size;
+	currSeg = Free_Mem;
+	old = NULL;
+	//Increment total amount of free memory
+	Total_Free += size;
+
+	//If free list is empty
+	if(Free_Mem == NULL)
+	{
+		//Set new segment as the start of the free list
+		newSeg->next = NULL;
+		Free_Mem = newSeg;
+	}
+	else
+	{
+		while(currSeg)
+		{
+			if(Free_Mem->base < base)
+			{
+				old = currSeg;
+				currSeg = currSeg->next;
+			}
+			else
+			{
+				Free_Mem = newSeg;
+				Free_Mem->next = currSeg;
+				break;
+			}
+		}
+		old->next = newSeg;
+		newSeg->next = NULL;
+	}
+	//Merge adjacent segments into a single, larger segment--call Merge_seg()
+	Merge_seg(old, newSeg, newSeg->next);
+	
+	//~ //Else, if new segment goes at start of list
+	//~ else if(Free_Mem->base > base)
+	//~ {
+		//~ //Set new segment as the start of the free list
+		//~ 
+	//~ }
+	//~ //Otherwise, new segment goes in the middle or at the end of the list:
+	//~ else
+	//~ {
+		//~ //Search free list to find segments to the left and right of the segment being freed
+			//~ //If previous segment's base < new segment's base < next segment's base
+				//~ //Insert new segment between two segments in list
+//~ 
+		//~ //If search failed, then the new segment belongs at end of the list
+			//~ //Add new segment to end of the list
+	//~ }	
 }
 
 /**
@@ -576,6 +746,33 @@ Dealloc_seg( int base, int size )
 void
 Merge_seg( seg_list* prev_seg, seg_list* new_seg, seg_list* next_seg )
 {
+	//If the previous free segment is not invalid
+		//And
+	//The new free segment follows directly after the previous segment
+	if(prev_seg != NULL && (prev_seg->base + prev_seg->size) == new_seg->base)
+	{
+		//Add the new segment's size to the previous segment
+		prev_seg->size += new_seg->size
+		//Set previous segment's next link to new segment's next link
+		prev_seg->next = new_seg->next;
+		//Free node representing new segment
+		free(new_seg);
+		//Set new segment pointer to previous segment
+		new_seg = prev_seg;
+	}
+
+	//If the next free segment is not invalid
+		//And
+	//The new free segment directly precedes the next segment
+	if(next_seg != NULL && (new_seg->base + new_seg->size) == next_seg->base)
+	{
+		//Add the next segment's size to the new segment
+		new_seg->size += next_seg->size
+		//Set new segment's next link to next segment's next link
+		new_seg->next = next_seg->next;
+		//Free node representing next segment
+		free(next_seg);
+	}
 }
 
 /**
@@ -613,6 +810,42 @@ Merge_seg( seg_list* prev_seg, seg_list* new_seg, seg_list* next_seg )
 void
 End_Service( )
 {
+	time_type *activeTime = Clock, *busyTime = CPU.total_busy_time;
+	//Retrieve PCB associated with program from terminal table
+	pcb_type *PCB;
+	PCB = Term_Table[Agent-1];
+	
+	//Mark pcb as done
+	PCB->status = DONE_PCB;
+	
+	//Remove PCB from CPU's active process
+	CPU.active_pcb = NULL;
+	
+	//Calculate active time for process and busy time for CPU
+	*activeTime = Clock;
+    Diff_time(&(PCB->run_time), activeTime);
+    //~ Add_time(activeTime, &(PCB->total_run_time));
+    Add_time(activeTime, busyTime);
+    
+	//Record time process became blocked
+	PCB->block_time = Clock;
+	
+	//If objective 4 or higher
+	if(Objective >= 4)
+	{
+		//Deallocate all I/O request blocks associated with PCB--call Purge_rb()
+		Purge_rb(PCB);
+		//Turn both the scheduling and CPU switches on in order to retrieve the next process to run
+		SCHED_SW = ON;
+        CPU_SW = ON;
+	}
+
+	//If the PCB has no outstanding I/O request blocks
+	if(PCB->rb_q == NULL)
+	{
+		//Load the next program for the user--call Next_pgm()
+		Next_pgm(PCB);
+	}
 }
 
 /**
