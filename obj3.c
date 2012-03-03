@@ -65,10 +65,13 @@ Logon_Service( )
 	//Initialize specific PCB fields:
 	//Mark status as new
 	newPCB->status = NEW_PCB;
+	
 	//Save terminal table position
-	//~ newPCB->term_pos = ;
+	newPCB->term_pos = Agent - 1;
+	
 	//Set logon time
 	newPCB->logon_time = Clock;
+	
 	//Set user name 
 	char agentId[3];
 	char agentName[5] = "U0";
@@ -76,11 +79,13 @@ Logon_Service( )
 	strcat(agentName,agentId);
 	agentName[strlen(agentName)] = '\0';
 	strcpy(newPCB->username, agentName);
+	
 	//Save PCB in global terminal table
-	//~ Term_Table[] = newPCB;
+	Term_Table[newPCB->term_pos] = newPCB;
 	
 	//Initialize list of programs user will run--call Get_Script()
 	Get_Script(newPCB);
+	
 	//Execute first program of PCB--call Next_pgm()
 	if(Next_pgm(newPCB) == 0)
 	{
@@ -149,7 +154,7 @@ Logon_Service( )
 void
 Get_Script( pcb_type *pcb )
 {
-	char scriptIn[BUFSIZ];
+	char *scriptIn = (char*)malloc(sizeof(char) * (BUFSIZ));
 	int progIndex, scriptIndex = 0;
 	
 	//Allocate PCB's array of scripts
@@ -163,7 +168,7 @@ Get_Script( pcb_type *pcb )
 	{
 		fscanf(Script_fp, "%s", scriptIn);
 		//Capitalize script name so that case does not matter
-		*scriptIn = toupper(*scriptIn);
+		strcpy(scriptIn, strupr(scriptIn));
 
 		//Output name of the script to output file
 		print_out("%s ",scriptIn);
@@ -175,7 +180,7 @@ Get_Script( pcb_type *pcb )
 			//If names match
 			if(strcmp(scriptIn, Prog_Names[progIndex]) == 0)
 			{
-			//Mark ID in PCB's scripts array
+				//Mark ID in PCB's scripts array
 				scriptArray[scriptIndex] = progIndex;
 				break;
 			}
@@ -235,7 +240,6 @@ Get_Script( pcb_type *pcb )
 int
 Next_pgm( pcb_type* pcb )
 {
-	time_type currTime = Clock;
 	//If the next program is not the first program the user will run
 		//And
 	//No unserviced I/O request blocks exist
@@ -255,12 +259,14 @@ Next_pgm( pcb_type* pcb )
 	//If encountered last program script
 	if(pcb->script[pcb->current_prog] == LOGOFF)
 	{
+		time_type currTime = Clock;
 		//Mark PCB as terminated and do not load another program
 		pcb->status = TERMINATED_PCB;
 		
 		//Calculate total time logged on
-		//~ Diff_time(&pcb->logon_time, &currTime);
-		//~ Add_time(&currTime, &(pcb->total_logon_time));
+		Diff_time(&pcb->logon_time, &currTime);
+		pcb->total_logon_time.seconds = currTime.seconds;
+		pcb->total_logon_time.nanosec = currTime.nanosec;
 		return 0;
 	}
 
@@ -296,7 +302,7 @@ Next_pgm( pcb_type* pcb )
 	}
 
 	//Increment index position of program script for next call to Next_pgm()
-	pcb->current_prog = pcb->current_prog + 1;
+	pcb->current_prog++;
 	
 	return 1;
 }
@@ -382,14 +388,18 @@ Get_Memory( pcb_type* pcb )
 	{
 		//Read "SEGMENT size_of_segment access_bits" from program file
 		fscanf(Prog_Files[currProg], "%s %d %x", buf, &size_of_segment, &access_bits);
+		
 		//Set size of current segment
 		pcb->seg_table[currSeg].size = size_of_segment;
+		
 		//Set access bits of current segment
 		pcb->seg_table[currSeg].access = access_bits;
+		
 		//Increment amount of memory used
 		Total_Free -= pcb->seg_table[currSeg].size;
 		
 		progSize += pcb->seg_table[currSeg].size;
+		
 		//Go to next segment in user's segment table
 	}
 
@@ -413,8 +423,11 @@ Get_Memory( pcb_type* pcb )
 		if(baseMem < 0)
 		{
 			//Compact memory to eliminate external fragmentation and try to get the base pointer again--call Alloc_seg()
+			Compact_mem();
+            base = Alloc_seg(pcb->seg_table[i].size);
 			return;
 		}
+		pcb->seg_table[i].base = baseMem;
 	}
 }
 
@@ -579,6 +592,7 @@ Loader( pcb_type* pcb )
 		//Display each segment of program
 		Display_pgm(pcb->seg_table, currSeg, pcb);
 	}
+	//~ print_out("\t\tProgram number %d, %s, has been loaded for user %s.\n\n",pcb->current_prog+1, Prog_Names[pcb->script[pcb->current_prog]], pcb->username);
 }
 
 /**
@@ -651,6 +665,7 @@ Dealloc_seg( int base, int size )
 	newSeg->size = size;
 	currSeg = Free_Mem;
 	old = NULL;
+	
 	//Increment total amount of free memory
 	Total_Free += size;
 
@@ -665,16 +680,17 @@ Dealloc_seg( int base, int size )
 	{
 		while(currSeg)
 		{
-			if(Free_Mem->base < base)
+			if(currSeg->base < base)
 			{
 				old = currSeg;
 				currSeg = currSeg->next;
 			}
 			else
 			{
-				Free_Mem = newSeg;
-				Free_Mem->next = currSeg;
-				break;
+				old->next = newSeg;
+				newSeg->next = currSeg;
+				Merge_seg(old, newSeg, currSeg);
+				return;
 			}
 		}
 		old->next = newSeg;
@@ -682,23 +698,6 @@ Dealloc_seg( int base, int size )
 	}
 	//Merge adjacent segments into a single, larger segment--call Merge_seg()
 	Merge_seg(old, newSeg, newSeg->next);
-	
-	//~ //Else, if new segment goes at start of list
-	//~ else if(Free_Mem->base > base)
-	//~ {
-		//~ //Set new segment as the start of the free list
-		//~ 
-	//~ }
-	//~ //Otherwise, new segment goes in the middle or at the end of the list:
-	//~ else
-	//~ {
-		//~ //Search free list to find segments to the left and right of the segment being freed
-			//~ //If previous segment's base < new segment's base < next segment's base
-				//~ //Insert new segment between two segments in list
-//~ 
-		//~ //If search failed, then the new segment belongs at end of the list
-			//~ //Add new segment to end of the list
-	//~ }	
 }
 
 /**
@@ -753,10 +752,13 @@ Merge_seg( seg_list* prev_seg, seg_list* new_seg, seg_list* next_seg )
 	{
 		//Add the new segment's size to the previous segment
 		prev_seg->size += new_seg->size
+		
 		//Set previous segment's next link to new segment's next link
 		prev_seg->next = new_seg->next;
+		
 		//Free node representing new segment
 		free(new_seg);
+		
 		//Set new segment pointer to previous segment
 		new_seg = prev_seg;
 	}
@@ -768,8 +770,10 @@ Merge_seg( seg_list* prev_seg, seg_list* new_seg, seg_list* next_seg )
 	{
 		//Add the next segment's size to the new segment
 		new_seg->size += next_seg->size
+		
 		//Set new segment's next link to next segment's next link
 		new_seg->next = next_seg->next;
+		
 		//Free node representing next segment
 		free(next_seg);
 	}
@@ -810,7 +814,7 @@ Merge_seg( seg_list* prev_seg, seg_list* new_seg, seg_list* next_seg )
 void
 End_Service( )
 {
-	time_type *activeTime = Clock, *busyTime = CPU.total_busy_time;
+	time_type *activeTime = Clock, *busyTime = CPU.total_busy_time, *runTime = PCB->total_run_time;
 	//Retrieve PCB associated with program from terminal table
 	pcb_type *PCB;
 	PCB = Term_Table[Agent-1];
@@ -822,9 +826,8 @@ End_Service( )
 	CPU.active_pcb = NULL;
 	
 	//Calculate active time for process and busy time for CPU
-	*activeTime = Clock;
     Diff_time(&(PCB->run_time), activeTime);
-    //~ Add_time(activeTime, &(PCB->total_run_time));
+    Add_time(activeTime, runTime);
     Add_time(activeTime, busyTime);
     
 	//Record time process became blocked
@@ -899,6 +902,7 @@ void print_free_list( )
 		//Print base position and last position in block
 		printf("Free Block: %d Base: %d End: %d\n", currBlock, Free_Mem->base, (Free_Mem->base + Free_Mem->size - 1));
 		currNode = currNode->next;
+		currBlock++;
 	}
 }
 
