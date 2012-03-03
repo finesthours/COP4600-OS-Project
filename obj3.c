@@ -186,7 +186,7 @@ Get_Script( pcb_type *pcb )
 			}
 		}
 		scriptIndex++;
-	}while(strcmp(scriptIn,"LOGOFF")!=0)	//Stop reading script names when "LOGOFF" script name encountered
+	}while(strcmp(scriptIn,"LOGOFF")!=0);	//Stop reading script names when "LOGOFF" script name encountered
 }
 
 /**
@@ -295,10 +295,7 @@ Next_pgm( pcb_type* pcb )
 	if(Objective >= 4)
 	{
 		//Insert process into CPU's ready queue 
-		if(CPU.ready_q!=NULL)
-			CPU.ready_q->next = pcb;
-		else
-			CPU.ready_q->pcb = pcb;
+		Add_cpuq(pcb);
 	}
 
 	//Increment index position of program script for next call to Next_pgm()
@@ -418,16 +415,16 @@ Get_Memory( pcb_type* pcb )
 	for(currSeg = 0; currSeg < numSegs; currSeg++)
 	{
 		//Try to allocate a new segment and save returned base pointer position--call Alloc_seg()
-		baseMem = Alloc_seg(pcb-seg_table[currSeg].size);
+		baseMem = Alloc_seg(pcb->seg_table[currSeg].size);
 		//If no space was available (invalid position returned)
 		if(baseMem < 0)
 		{
 			//Compact memory to eliminate external fragmentation and try to get the base pointer again--call Alloc_seg()
 			Compact_mem();
-            base = Alloc_seg(pcb->seg_table[i].size);
+            baseMem = Alloc_seg(pcb->seg_table[currSeg].size);
 			return;
 		}
-		pcb->seg_table[i].base = baseMem;
+		pcb->seg_table[currSeg].base = baseMem;
 	}
 }
 
@@ -521,7 +518,7 @@ Alloc_seg( int size )
 		else
 		{
 			//By-pass removed node in list
-			old->next = currBlock-next;
+			old->next = currBlock->next;
 		}
 
 		//Delete node
@@ -587,7 +584,7 @@ Loader( pcb_type* pcb )
 		for(currInst = 0; currInst < pcb->seg_table[currSeg].size; currInst++)
 		{
 			//Read instruction from program file into memory--call Get_Instr()
-			Get_Instr(pcb->script[pcb->current_prog], &Mem[pcb->seg_table[currSeg].base + currInst])
+			Get_Instr(pcb->script[pcb->current_prog], &Mem[pcb->seg_table[currSeg].base + currInst]);
 		}
 		//Display each segment of program
 		Display_pgm(pcb->seg_table, currSeg, pcb);
@@ -751,7 +748,7 @@ Merge_seg( seg_list* prev_seg, seg_list* new_seg, seg_list* next_seg )
 	if(prev_seg != NULL && (prev_seg->base + prev_seg->size) == new_seg->base)
 	{
 		//Add the new segment's size to the previous segment
-		prev_seg->size += new_seg->size
+		prev_seg->size += new_seg->size;
 		
 		//Set previous segment's next link to new segment's next link
 		prev_seg->next = new_seg->next;
@@ -769,7 +766,7 @@ Merge_seg( seg_list* prev_seg, seg_list* new_seg, seg_list* next_seg )
 	if(next_seg != NULL && (new_seg->base + new_seg->size) == next_seg->base)
 	{
 		//Add the next segment's size to the new segment
-		new_seg->size += next_seg->size
+		new_seg->size += next_seg->size;
 		
 		//Set new segment's next link to next segment's next link
 		new_seg->next = next_seg->next;
@@ -814,7 +811,7 @@ Merge_seg( seg_list* prev_seg, seg_list* new_seg, seg_list* next_seg )
 void
 End_Service( )
 {
-	time_type *activeTime = Clock, *busyTime = CPU.total_busy_time, *runTime = PCB->total_run_time;
+	time_type *activeTime = &Clock;
 	//Retrieve PCB associated with program from terminal table
 	pcb_type *PCB;
 	PCB = Term_Table[Agent-1];
@@ -827,8 +824,8 @@ End_Service( )
 	
 	//Calculate active time for process and busy time for CPU
     Diff_time(&(PCB->run_time), activeTime);
-    Add_time(activeTime, runTime);
-    Add_time(activeTime, busyTime);
+    Add_time(activeTime, &(PCB->total_run_time));
+    Add_time(activeTime, &(CPU.total_busy_time));
     
 	//Record time process became blocked
 	PCB->block_time = Clock;
