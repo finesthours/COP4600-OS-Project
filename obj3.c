@@ -58,9 +58,8 @@ void
 Logon_Service( )
 {
 	//Allocate new Process Control Block with all fields initialized to 0
-	pcb_type *newPCB;
-	newPCB = calloc(1, sizeof(pcb_type));
-	//~ memset(PCB, 0, sizeof(PCB));
+	pcb_type *newPCB = (pcb_type*)malloc(sizeof(pcb_type));
+    memset(newPCB, 0, sizeof(pcb_type));
 
 	//Initialize specific PCB fields:
 	//Mark status as new
@@ -162,7 +161,9 @@ Get_Script( pcb_type *pcb )
 	scriptArray = (prog_type *) malloc(sizeof(prog_type)*Max_Num_Scripts);
 	//Mark index of first script
 	pcb->current_prog = 0;
-
+	pcb->script = scriptArray;
+	
+	print_out("\tScript for user %s is:\n\t", pcb->username);
 	//Read each script name in file
 	do
 	{
@@ -178,8 +179,10 @@ Get_Script( pcb_type *pcb )
 		{
 			//Compare script name to each name in Prog_Names array
 			//If names match
+			
 			if(strcmp(scriptIn, Prog_Names[progIndex]) == 0)
 			{
+				//~ printf("%s\n",Prog_Names[progIndex] );
 				//Mark ID in PCB's scripts array
 				scriptArray[scriptIndex] = progIndex;
 				break;
@@ -187,6 +190,7 @@ Get_Script( pcb_type *pcb )
 		}
 		scriptIndex++;
 	}while(strcmp(scriptIn,"LOGOFF")!=0);	//Stop reading script names when "LOGOFF" script name encountered
+	print_out("\n\n");
 }
 
 /**
@@ -267,6 +271,7 @@ Next_pgm( pcb_type* pcb )
 		Diff_time(&pcb->logon_time, &currTime);
 		pcb->total_logon_time.seconds = currTime.seconds;
 		pcb->total_logon_time.nanosec = currTime.nanosec;
+		print_out("\t\tUser %s has logged off.\n",pcb->username);
 		return 0;
 	}
 
@@ -369,7 +374,7 @@ Get_Memory( pcb_type* pcb )
 	char buf[BUFSIZ];
 	
 	//Read the fields "PROGRAM" and number of segments from program file
-	if(fscanf(Prog_Files[currProg], "%s %d", buf,&numSegs) == EOF)
+	if(fscanf(Prog_Files[currProg], "%s %d ", buf,&numSegs) == EOF)
 	{
 		printf("File Empty");
 		return;
@@ -384,7 +389,7 @@ Get_Memory( pcb_type* pcb )
 	for(currSeg = 0; currSeg < numSegs; currSeg++)
 	{
 		//Read "SEGMENT size_of_segment access_bits" from program file
-		fscanf(Prog_Files[currProg], "%s %d %x", buf, &size_of_segment, &access_bits);
+		fscanf(Prog_Files[currProg], "%s %d %x ", buf, &size_of_segment, &access_bits);
 		
 		//Set size of current segment
 		pcb->seg_table[currSeg].size = size_of_segment;
@@ -393,7 +398,7 @@ Get_Memory( pcb_type* pcb )
 		pcb->seg_table[currSeg].access = access_bits;
 		
 		//Increment amount of memory used
-		Total_Free -= pcb->seg_table[currSeg].size;
+		//Total_Free -= pcb->seg_table[currSeg].size;
 		
 		progSize += pcb->seg_table[currSeg].size;
 		
@@ -509,7 +514,7 @@ Alloc_seg( int size )
 		//Use free block's base address for segment
 		segment_base = currBlock->base;
 		//If block is first in list
-		if(currBlock->next == NULL)
+		if(currBlock == Free_Mem)
 		{
 			//Set the head of the free list to the next node
 			Free_Mem = currBlock->next;
@@ -525,6 +530,7 @@ Alloc_seg( int size )
 		free(currBlock);
 		//Decrement total amount of free memory
 		Total_Free -= size;
+		return segment_base;
 	}
 	//Else, if block is larger than needed
 	else if(currBlock->size > size)
@@ -535,13 +541,14 @@ Alloc_seg( int size )
 		//Adjust node's size and starting position:
 		//Increment base address and decrement block size by given size
 		currBlock->base += size;
-        currBlock->size -= size;
+		currBlock->size -= size;
 		
 		//Decrement total amount of free memory
 		Total_Free -= size;
+		return segment_base;
 	}
 
-	return segment_base;
+	return -1;
 }
 
 /**
@@ -575,7 +582,8 @@ Alloc_seg( int size )
 void
 Loader( pcb_type* pcb )
 {
-	int currSeg, currInst;
+	int currSeg = 0, currInst = 0;
+	//~ printf("numsegs = %d\n segsize = %d\n", pcb->num_segments, pcb->seg_table[currSeg].size);
 	
 	//For each segment in the user's segment table
 	for(currSeg = 0; currSeg < pcb->num_segments; currSeg++)
@@ -587,9 +595,10 @@ Loader( pcb_type* pcb )
 			Get_Instr(pcb->script[pcb->current_prog], &Mem[pcb->seg_table[currSeg].base + currInst]);
 		}
 		//Display each segment of program
+		//~ printf("segsize = %d\n", pcb->seg_table[currSeg].size);
 		Display_pgm(pcb->seg_table, currSeg, pcb);
 	}
-	//~ print_out("\t\tProgram number %d, %s, has been loaded for user %s.\n\n",pcb->current_prog+1, Prog_Names[pcb->script[pcb->current_prog]], pcb->username);
+	print_out("\t\tProgram number %d, %s, has been loaded for user %s.\n\n",pcb->current_prog+1, Prog_Names[pcb->script[pcb->current_prog]], pcb->username);
 }
 
 /**
@@ -655,13 +664,12 @@ Dealloc_pgm( pcb_type* pcb )
 void
 Dealloc_seg( int base, int size )
 {
-	seg_list *newSeg, *currSeg, *old;
+	seg_list *newSeg, *currSeg = Free_Mem, *old = NULL;
+	
 	//Allocate and initialize a new free segment
 	newSeg = (seg_list*) malloc(sizeof(seg_list));
 	newSeg->base = base;
 	newSeg->size = size;
-	currSeg = Free_Mem;
-	old = NULL;
 	
 	//Increment total amount of free memory
 	Total_Free += size;
@@ -673,28 +681,51 @@ Dealloc_seg( int base, int size )
 		newSeg->next = NULL;
 		Free_Mem = newSeg;
 	}
+	
 	else
 	{
 		while(currSeg)
 		{
-			if(currSeg->base < base)
+			if(currSeg->base > base)
 			{
+				//if new segment goes at start of list
+				if(old == NULL)
+				{
+					//Set new segment as the start of the free list
+					Free_Mem = newSeg;
+					Free_Mem->next = currSeg;
+					Merge_seg(old, newSeg, currSeg);
+					return;
+				}
+				
+				//Otherwise, new segment goes in the middle or at the end of the list:
+				//Search free list to find segments to the left and right of the segment being freed
+				//If previous segment's base < new segment's base < next segment's base
+				//Insert new segment between two segments in list
+				else
+				{
+					old->next = newSeg;
+					newSeg->next = currSeg;
+					Merge_seg(old, newSeg, currSeg);
+					return;
+				}
+				
 				old = currSeg;
 				currSeg = currSeg->next;
 			}
-			else
+			//If search failed, then the new segment belongs at end of the list
+			//Add new segment to end of the list
+			else if(currSeg->next == NULL)
 			{
-				old->next = newSeg;
-				newSeg->next = currSeg;
-				Merge_seg(old, newSeg, currSeg);
+				currSeg->next = newSeg;
+				newSeg->next = NULL;
+				Merge_seg(old, newSeg, newSeg->next);
 				return;
 			}
+			old = currSeg;
+			currSeg = currSeg->next;
 		}
-		old->next = newSeg;
-		newSeg->next = NULL;
 	}
-	//Merge adjacent segments into a single, larger segment--call Merge_seg()
-	Merge_seg(old, newSeg, newSeg->next);
 }
 
 /**
@@ -818,6 +849,9 @@ End_Service( )
 	
 	//Mark pcb as done
 	PCB->status = DONE_PCB;
+	
+	print_out("\t\tProgram number %d, %s, has ended for user %s.\n", PCB->current_prog, Prog_Names[PCB->script[PCB->current_prog-1]], PCB->username);
+    print_out("\t\tCPU burst was %u instructions.\n\n",PCB->sjnburst);
 	
 	//Remove PCB from CPU's active process
 	CPU.active_pcb = NULL;

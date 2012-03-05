@@ -154,7 +154,7 @@ Boot( )
 	{
 		//Display segment Mem_Map[i + Max_Segments] since kernel resides in
 		//Upper half of Mem_Map; pass NULL as PCB since OS has no PCB
-		Display_pgm( Mem_Map, currSeg, NULL );
+		Display_pgm( Mem_Map, (currSeg + Max_Segments), NULL );
 	}
 }
 
@@ -215,7 +215,7 @@ Get_Instr( int prog_id, struct instr_type* instruction )
 	char *p, *q;
 	
 	//Read opcode and operand from file--store as strings initially Convert to uppercase so that case does not matter
-	fscanf(Prog_Files[prog_id], "%s %s", opcode_str, operand_str);
+	fscanf(Prog_Files[prog_id], "%s %s ", opcode_str, operand_str);
 	for (p = opcode_str; *p != '\0'; ++p)
 	{
 		*p = toupper(*p);
@@ -793,19 +793,19 @@ Display_pgm( segment_type* seg_table, int seg_num, pcb_type* pcb )
 	else
 	{
 		//Print name of user's program
-		print_out("        SEGMENT #%d OF PROGRAM %s OF PROCESS BOOT\n", seg_num, Prog_Names[ pcb->script[ pcb->current_prog ] ]);
+		print_out("        SEGMENT #%d OF PROGRAM %s OF PROCESS %s\n", seg_num, Prog_Names[ pcb->script[ pcb->current_prog ] ], pcb->username);
 	}
 	
 	//Print additional header information
-	print_out("        ACCBITS: 0%x  LENGTH: %d\n", seg_table[seg_num + Max_Segments].access, seg_table[seg_num + Max_Segments].size);
+	print_out("      ACCBITS: %02X  LENGTH: %d\n", seg_table[seg_num].access, seg_table[seg_num].size);
 	print_out("        MEM ADDR  OPCODE  OPERAND\n        --------  ------  -------\n");
 	
 	//Display current segment of memory:
 	//Get base memory position of the first instruction in the segment
-	int base = seg_table[seg_num + Max_Segments].base;
+	int base = seg_table[seg_num].base;
 
 	//For each instruction in the segment
-	for(counter1 = 0; counter1 < seg_table[seg_num + Max_Segments].size; counter1++)
+	for(counter1 = 0; counter1 < seg_table[seg_num].size; counter1++)
 	{
 		//If opcode is an instruction, look for the appropriate one in Op_Names
 		if(Mem[base].opcode < NUM_OPCODES)
@@ -819,6 +819,7 @@ Display_pgm( segment_type* seg_table, int seg_num, pcb_type* pcb )
 			{
 				//Display burst count
 				print_out("     %lu\n", Mem[base].operand);
+				printf("opcode = %d\tburst = %lu\n", Mem[base].opcode, Mem[base].operand);
 			}
 			
 			//Else, if REQ or JUMP instruction
