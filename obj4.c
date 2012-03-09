@@ -48,6 +48,27 @@
 void
 Add_cpuq( pcb_type *pcb )
 {
+	//Create and initialize pcb node
+	pcb_list *pcbNode = (pcb_list*)malloc(sizeof(pcb_list));
+	pcbNode->pcb = pcb;
+	
+	//If ready queue is empty
+	if(CPU.ready_q == NULL)
+	{
+		//Set ready queue to new node
+		CPU.ready_q->pcb = pcbNode->pcb;
+		//All links point to itself since it is circularly linked
+		CPU.ready_q->next = CPU.ready_q;
+		CPU.ready_q->prev = CPU.ready_q;
+		return;
+	}
+	
+	//Otherwise, queue is non-empty
+	//Place node at end of queue
+	pcbNode->next = CPU.ready_q;
+	pcbNode->prev = CPU.ready_q->prev;
+	CPU.ready_q->prev->next = pcbNode;
+	CPU.ready_q->prev = pcbNode;
 }
 
 /**
@@ -82,6 +103,30 @@ Add_cpuq( pcb_type *pcb )
 void
 Add_devq( int dev_id, rb_type* rb )
 {
+	//Create and initialize request block node
+	rb_list *rbNode = (rb_list*)malloc(sizeof(rb_list));
+	rbNode->rb = rb;
+	
+	//If device queue is empty
+	if(Dev_Table[dev_id].wait_q == NULL)
+	{
+		//Set device queue to new node
+		Dev_Table[dev_id].wait_q->rb = rbNode->rb;
+		//All links point to itself since it is circularly linked
+		Dev_Table[dev_id].wait_q->next = Dev_Table[dev_id].wait_q;
+		Dev_Table[dev_id].wait_q->prev = Dev_Table[dev_id].wait_q;
+		return;
+	}
+	
+	//Otherwise, queue is non-empty
+	//Place node at end of queue
+	rbNode->next = Dev_Table[dev_id].wait_q;
+	rbNode->prev = Dev_Table[dev_id].wait_q->prev;
+	Dev_Table[dev_id].wait_q->prev->next = rbNode;
+	Dev_Table[dev_id].wait_q->prev = rbNode;
+	
+	//Record time when rb is enqueued
+	Dev_Table[dev_id].total_q_time = Clock;
 }
 
 /**
@@ -113,6 +158,26 @@ Add_devq( int dev_id, rb_type* rb )
 void
 Add_rblist( pcb_type* pcb, rb_type* rb)
 {
+	//Create and initialize request block node
+	rb_list *rbNode = (rb_list*)malloc(sizeof(rb_list));
+	rbNode->rb = rb;
+	
+	//If request block queue is empty
+	if(pcb->rb_q == NULL)
+	{
+		//Set request block queue to new node
+		pcb->rb_q->rb = rbNode->rb;
+		//All links point to itself since it is circularly linked
+		pcb->rb_q->next = pcb->rb_q;
+		pcb->rb_q->prev = pcb->rb_q;
+		return;
+	}
+	//Otherwise, queue is non-empty
+	//Place node at end of queue
+	rbNode->next = pcb->rb_q;
+	rbNode->prev = pcb->rb_q->prev;
+	pcb->rb_q->prev->next = rbNode;
+	pcb->rb_q->prev = rbNode;
 }
 
 /**
@@ -144,8 +209,33 @@ Add_rblist( pcb_type* pcb, rb_type* rb)
 pcb_type*
 Scheduler( )
 {
-	// temporary return value
-	return( NULL );
+	//Update the number of processes serviced by the CPU
+	CPU.num_served++;
+	
+	//Get first pcb in CPU's ready queue
+	pcb_type *pcb = (pcb_type*)malloc(sizeof(pcb_type));
+	pcb = CPU.ready_q->pcb;
+	
+	//Remove first node in queue
+	//If not removing last pcb in ready queue
+	if(CPU.ready_q->next != CPU.ready_q && CPU.ready_q->prev != CPU.ready_q)
+	{
+		//Change head of ready queue
+		CPU.ready_q->prev->next = CPU.ready_q->next;
+		CPU.ready_q = CPU.ready_q->next;
+	}
+
+	//Calculate time process was ready
+	//Increment total ready time for process
+	Add_time(&Clock, &CPU.active_pcb->total_ready_time);
+	//Increment total CPU queue waiting time
+	Add_time(&Clock, &CPU.total_q_time);
+
+	//Reset the burst count for the next program
+	CPU.CPU_burst = 0;
+	
+	//return next active process
+	return pcb;
 }
 
 /**
@@ -179,6 +269,20 @@ Scheduler( )
 void
 Sio_Service( )
 {
+	//Allocate and initialize new I/O request block--call Alloc_rb()
+	rb_type *rb = (rb_type*)malloc(sizeof(rb_type));
+	rb = Alloc_rb();
+	
+	//Add rb to both the device's and pcb's queues--call both Add_devq() and Add_rblist()
+	Add_devq(Agent, rb);
+	Add_rblist(CPU.active_pcb, rb);
+	
+	//Initiate I/O operation on requested device--call Start_IO()
+	Start_IO(Agent);
+	
+	//Return control to interrupted process--turn CPU switch on and scheduling switch off
+	CPU_SW = ON;
+	SCHED_SW = OFF;
 }
 
 /**
@@ -238,8 +342,39 @@ Sio_Service( )
 rb_type*
 Alloc_rb( )
 {
-	// temporary return value
-	return( NULL );
+	//Allocate request block
+	rb_type *rb = (rb_type*)malloc(sizeof(rb_type));
+	
+	//Initialize request block's fields:
+	//Mark status as pending
+	rb->status = PENDING_RB;
+	//Retrieve process that owns this rb using the current agent ID
+	rb->pcb = Term_Table[Agent-1];
+	
+	//Calculate and save the device's ID for the rb:
+	//Let saved_pc be the program counter from the pcb's saved CPU state
+	addr_type *saved_pc = (addr_type*)malloc(sizeof(addr_type));
+	saved_pc = &rb->pcb->cpu_save.pc;
+	
+	//Let device_seg be the segment from the pcb's segment table of the last executed instruction (retrieved from saved_pc)
+	segment_type *device_seg = (segment_type*)malloc(sizeof(segment_type));
+	device_seg = &rb->pcb->seg_table[saved_pc->segment];
+	
+	//Let device_instr be the instruction from Mem at postion device_seg.base + saved_pc.offset - 1
+	instr_type *device_instr = (instr_type*)malloc(sizeof(instr_type));
+	device_instr = &Mem[device_seg->base + saved_pc->offset - 1];
+	
+	//Finally, set rb->dev_id be the opcode at device_instr converted to its corresponding device ID (i.e., opcode - NUM_OPCODES)
+	rb->dev_id = device_instr->opcode - NUM_OPCODES;
+	
+	//Set number of bytes to transfer
+	rb->bytes = device_instr->operand.bytes;
+	
+	//Save logical address (segment/offset pair) of the device instruction using process's saved PC
+	rb->req_id = *saved_pc;
+	
+	//return new I/O request block
+	return rb;
 }
 
 /**
@@ -371,6 +506,17 @@ Wio_Service( )
 rb_type*
 Find_rb( pcb_type* pcb, struct addr_type* req_id )
 {
+	//Traverse the pcb's request block list 
+	while(pcb->rb_q)
+	{
+		//If the rb's request address matches the given requested address
+		if(pcb->rb_q->rb->req_id.segment == req_id->segment && pcb->rb_q->rb->req_id.offset == req_id->offset)
+		{
+			//The needed rb has been found
+			return pcb->rb_q->rb;
+		}
+		pcb->rb_q = pcb->rb_q->next;
+	}
 	// temporary return value
 	return( NULL );
 }
