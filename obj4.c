@@ -425,6 +425,45 @@ Alloc_rb( )
 void
 Start_IO( int dev_id )
 {
+	
+	//If the device is busy
+	if(Dev_Table[dev_id].current_rb->status == PENDING_RB)
+	{
+		//Do nothing
+		return;
+	}
+
+	//If the device has no requests to service in its waiting queue
+	if(Dev_Table[dev_id].wait_q == NULL)
+	{
+		//Do nothing
+		return;
+	}
+
+	//Get and remove first node from waiting list
+	rb_type *rb = (rb_type*)malloc(sizeof(rb_type));
+	rb = Dev_Table[dev_id].wait_q->rb;
+	
+	Dev_Table[dev_id].wait_q->prev = Dev_Table[dev_id].wait_q->next;
+	Dev_Table[dev_id].wait_q = Dev_Table[dev_id].wait_q->next;
+	
+	//Mark rb as the current request block in the device; set rb's status as active
+	Dev_Table[dev_id].current_rb = rb;
+	
+	//Update time spent waiting in queue--calculate difference between current time and time it was enqueued and add this value to the current queue wait time--use Add_time() and Diff_time()
+	//~ Add_time( Diff_time(&Clock, ), Dev_Table[dev_id].total_q_time)Dev_Table[dev_id].total_q_time
+
+	//Compute length of time that I/O will take (transfer time)--compute number of seconds and then use the remainder to calculate the number of nanoseconds
+
+	//Increment device's busy time by the transfer time--use Add_time()
+
+	//Compute time I/O ends--ending time is the current time + transfer time--use Add_time() and Diff_time()
+
+	//Update the number of IO requests served by the device
+	Dev_Table[dev_id].num_served++;
+
+	//Add ending I/O device interrupt to event list
+	
 }
 
 /**
@@ -506,19 +545,22 @@ Wio_Service( )
 rb_type*
 Find_rb( pcb_type* pcb, struct addr_type* req_id )
 {
+	rb_list *rbNode = pcb->rb_q;
+
 	//Traverse the pcb's request block list 
-	while(pcb->rb_q)
+	while(rbNode)
 	{
 		//If the rb's request address matches the given requested address
-		if(pcb->rb_q->rb->req_id.segment == req_id->segment && pcb->rb_q->rb->req_id.offset == req_id->offset)
+		if(rbNode->rb->req_id.segment == req_id->segment && rbNode->rb->req_id.offset == req_id->offset)
 		{
 			//The needed rb has been found
-			return pcb->rb_q->rb;
+			return rbNode->rb;
 		}
-		pcb->rb_q = pcb->rb_q->next;
+		rbNode = rbNode->next;
 	}
+	err_quit("no rb found.\n");
 	// temporary return value
-	return( NULL );
+	//~ return( NULL );
 }
 
 /**
@@ -545,6 +587,41 @@ Find_rb( pcb_type* pcb, struct addr_type* req_id )
 void
 Delete_rb( rb_type* rb, pcb_type* pcb )
 {
+	rb_list *rbNode = pcb->rb_q;
+
+	//Traverse the pcb's request block list 
+	while(rbNode)
+	{
+		//If the rb has been found
+		if(rbNode->rb->req_id.segment == rb->req_id.segment && rbNode->rb->req_id.offset == rb->req_id.offset)
+		{
+			//If deleting front of queue
+			if(rbNode == pcb->rb_q)
+			{
+				//Change head of list
+				pcb->rb_q->prev->next = pcb->rb_q->next;
+				pcb->rb_q = pcb->rb_q->next;
+			}
+			//If deleting last remaining node
+			else if(rbNode->next->rb == rbNode->rb)
+			{
+				//Delete list
+				pcb->rb_q == NULL;
+			}
+			//Otherwise, remove node from middle of list
+			else
+			{
+				//By-pass node in list
+				rbNode->prev->next = rbNode->next;
+				rbNode = rbNode->next;
+			}
+			//Deallocate both the list node and the request block
+			free(rbNode->rb);
+			free(rb);
+			return;
+		}
+		rbNode = rbNode->next;
+	}
 }
 
 /**
@@ -639,6 +716,42 @@ Eio_Service( )
 void
 Purge_rb( pcb_type* pcb )
 {
+	rb_list *currNode, *prevNode;
+	//If list is not empty
+	if(pcb->rb_q)
+	{
+		currNode = pcb->rb_q;	
+		//Traverse pcb's list of request blocks removing all finished rbs:
+		while(currNode)
+		{
+			//If rb is done
+			if(currNode->rb->status = DONE_RB)
+			{
+				//If first rb in list is done
+				if(currNode == pcb->rb_q)
+				{
+					//If deleting last remaining node
+					if(currNode->next->rb = currNode->rb)
+					{
+						//Delete list
+						pcb->rb_q == NULL;
+					}
+					//Remove node from front of list
+					//Change head of list
+					pcb->rb_q->prev->next = pcb->rb_q->next;
+					pcb->rb_q = pcb->rb_q->next;
+				}
+				//Remove node from middle of list
+				else
+				{
+					prevNode->next = currNode->next;
+					currNode = currNode->next;
+				}
+			}
+			prevNode = currNode;
+			currNode = currNode->next;
+		}
+	}
 }
 
 /**
@@ -661,6 +774,11 @@ Purge_rb( pcb_type* pcb )
 void
 Dispatcher( )
 {
+	//Initialize and load the lower half of the kernel segment table with the segment table of the current user (located at CPU.active_pcb)--call Load_Map()
+	Load_Map(CPU.active_pcb->seg_table, CPU.active_pcb->num_segments);
+
+	//Execute the program associated with the saved CPU state of the CPU's active process--call Exec_Program()
+	Exec_Program(&CPU.active_pcb->cpu_save);
 } 
 
 /**
@@ -685,6 +803,19 @@ Dispatcher( )
 void
 Load_Map( segment_type *seg_tab, int num_segments )
 {
+	int currSeg;
+	//For each user segment in the kernel's segment table
+	for(currSeg = 0; currSeg < Max_Segments; currSeg++)
+	{
+		//Reset segment's access mode to kernel mode so that any attempted access will result in segmentation fault (in simulated program)
+		Mem_Map[currSeg].access = 0;
+	}
+	//For each segment in user's program
+	for(currSeg = 0; currSeg < num_segments; currSeg++)
+	{
+		//Copy segment into user segment in kernel's segment table
+		Mem_Map[currSeg] = seg_tab[currSeg];
+	}
 }
 
 /**
