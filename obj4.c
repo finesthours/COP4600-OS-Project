@@ -444,25 +444,36 @@ Start_IO( int dev_id )
 	rb_type *rb = (rb_type*)malloc(sizeof(rb_type));
 	rb = Dev_Table[dev_id].wait_q->rb;
 	
-	Dev_Table[dev_id].wait_q->prev = Dev_Table[dev_id].wait_q->next;
+	Dev_Table[dev_id].wait_q->prev->next = Dev_Table[dev_id].wait_q->next;
+	Dev_Table[dev_id].wait_q->next->prev = Dev_Table[dev_id].wait_q->prev;
 	Dev_Table[dev_id].wait_q = Dev_Table[dev_id].wait_q->next;
 	
 	//Mark rb as the current request block in the device; set rb's status as active
-	Dev_Table[dev_id].current_rb = rb;
+	Dev_Table[dev_id].current_rb->status = ACTIVE_RB;
 	
 	//Update time spent waiting in queue--calculate difference between current time and time it was enqueued and add this value to the current queue wait time--use Add_time() and Diff_time()
-	//~ Add_time( Diff_time(&Clock, ), Dev_Table[dev_id].total_q_time)Dev_Table[dev_id].total_q_time
+	time_type currTime = Clock;
+    Diff_time(&(Dev_Table[dev_id].current_rb->q_time),&currTime);
+    Add_time(&currTime, &(Dev_Table[dev_id].total_q_time));
 
 	//Compute length of time that I/O will take (transfer time)--compute number of seconds and then use the remainder to calculate the number of nanoseconds
-
+	time_type transferTime;
+    transferTime.seconds = Dev_Table[dev_id].current_rb->bytes / Dev_Table[dev_id].bytes_per_sec;
+    
+    transferTime.nanosec = (Dev_Table[dev_id].current_rb->bytes % Dev_Table[dev_id].bytes_per_sec)*Dev_Table[dev_id].nano_per_byte;
+	
 	//Increment device's busy time by the transfer time--use Add_time()
-
+	Add_time(&transferTime, &Dev_Table[dev_id].total_busy_time);
+	
 	//Compute time I/O ends--ending time is the current time + transfer time--use Add_time() and Diff_time()
-
+	time_type ioEndTime = transferTime;
+    Add_time(&Clock, &ioEndTime);
+	
 	//Update the number of IO requests served by the device
 	Dev_Table[dev_id].num_served++;
 
 	//Add ending I/O device interrupt to event list
+	Add_Event(EIO_EVT,(dev_id+Num_Terminals+1),&ioEndTime);
 	
 }
 
@@ -525,6 +536,53 @@ Start_IO( int dev_id )
 void
 Wio_Service( )
 {
+	//Retrieve pcb from the terminal table that is waiting for I/O
+	pcb_type* pcb = Term_Table[Agent-1];
+
+	//Retrieve request instruction using saved CPU information
+    instr_type instr = Mem[pcb->seg_table[pcb->cpu_save.pc.segment].base + pcb->cpu_save.pc.offset-1];
+	
+	//Locate request block that process wants to wait for--call Find_rb()
+	rb_type* rb = Find_rb(pcb, &instr.operand.address);
+
+	//Determine status of request block
+	//If rb is still active or pending
+	if(rb->status == ACTIVE_RB || rb->status == PENDING_RB)
+    {
+		//Block process since I/O not finished:
+		//Mark PCB as blocked; mark it 
+		pcb->status == BLOCKED_PCB;
+
+		//Turn CPU and scheduling switches on to schedule a new process
+		SCHED_SW = ON;
+        CPU_SW   = ON;
+        
+		//Calculate active time for process and busy time for CPU
+		time_type currTime = Clock;
+        Diff_time(&pcb->run_time,&currTime);
+        Add_time(&currTime,&(pcb->total_run_time));
+        Add_time(&currTime,&(CPU.total_busy_time));
+
+		//Record time process was blocked
+		pcb->block_time = Clock;
+
+		//Print output message giving blocked procese and burst count
+		print_out("\t\tUser %s is blocked for I/O.\n", pcb->username);
+        print_out("\t\tCPU burst was %d instructions.\n\n",pcb->sjnburst);
+	}
+	//If rb has finished
+	if(rb->status == DONE_RB)
+    {
+		//Delete it and keep running current process:
+		//Delete rb from pcb's list
+		Delete_rb(rb, pcb);
+		
+		//Turn CPU switch on to execute a process
+		CPU_SW   = ON; 
+		
+		//Turn scheduling flag off to use current process (i.e., not schedule a new process)
+		SCHED_SW = OFF;
+	}
 }
 
 /**
@@ -684,6 +742,111 @@ Delete_rb( rb_type* rb, pcb_type* pcb )
 void
 Eio_Service( )
 {
+	//Retrieve device that caused the I/O interrupt from the device table
+	device_type* device = &(Dev_Table[Agent-Num_Terminals-1]);
+	
+	//Retrieve request block issued to device that is now complete
+	rb_type* currRB = device->current_rb;
+	
+	//Retrieve process that issued the request block to the device
+	pcb_type* currPCB = currRB->pcb;
+	
+	//Mark that device no longer has a current request block
+	device->current_rb = NULL;
+	
+	//Mark rb's status as done
+	currRB->status = DONE_RB;
+	
+	//Service next I/O request block for this device--call Start_IO()
+	Start_IO(Agent - Num_Terminals - 1);
+	
+	//Determine current status of process
+	//If process is ready to be ran or is already running
+	if(currPCB->status == READY_PCB || currPCB->status == ACTIVE_PCB)
+    {
+		//Turn off both switches
+        SCHED_SW = OFF;
+        CPU_SW   = OFF;
+    }
+		
+	//If process is blocked due to I/O
+	else if(currPCB->status == BLOCKED_PCB)
+    {
+		//If process was waiting on this rb 
+		if(currPCB->wait_rb == currRB)
+        {
+			//The process can now run:
+			//Delete rb from pcb's waiting list--call Delete_rb()
+			Delete_rb(currRB,currPCB);
+			
+			//Mark pcb as ready to run
+			currPCB->status = READY_PCB;
+			
+			//Add pcb to CPU's ready queue--call Add_cpuq()
+			Add_cpuq(currPCB);
+		}
+
+		//Record time process became ready
+		currPCB->ready_time = Clock;
+		
+		//Calculate and record time process was blocked
+		time_type currTime = Clock;
+        Diff_time(&(currPCB->block_time),&currTime);
+        Add_time(&currTime,&(currPCB->total_block_time));
+
+		//If CPU is has no currently active process
+		if(CPU.active_pcb == NULL)
+		{
+			//Turn on both switches to schedule a new process to run
+			SCHED_SW = ON;
+			CPU_SW   = ON;
+        }
+        //Otherwise, CPU is already busy, so
+        else
+        {
+			//Turn off both switches
+			SCHED_SW = OFF;
+			CPU_SW   = OFF;
+		}
+	}
+	
+	//If the process is done, but only waiting for I/O to complete.
+	if(currPCB->status == DONE_PCB)
+    {
+		//Delete rb from pcb's waiting list--call Delete_rb()
+		Delete_rb(currRB,currPCB);
+
+		//Load next program for pcb--call Next_pgm()
+		//If one was available
+		if(Next_pgm(currPCB) != 0)
+        {
+			//Mark pcb's status as ready to run
+            currPCB->status == READY_PCB;
+        }
+
+		//Record time process became ready
+		currPCB->ready_time = Clock;
+		
+		//Calculate and record time process was blocked
+		time_type currTime = Clock;
+        Diff_time(&(currPCB->block_time),&currTime);
+        Add_time(&currTime,&(currPCB->total_block_time));
+		
+		//If CPU is idle
+		if(CPU.active_pcb == NULL)
+		{
+			//Turn on CPU and scheduling switches to run a new process
+			SCHED_SW = ON;
+			CPU_SW   = ON;
+		}
+		//Otherwise, CPU is already busy, so
+		else
+        {
+			//Turn off both switches
+			SCHED_SW = OFF;
+			CPU_SW   = OFF;
+		}
+	}
 }
 
 /**
