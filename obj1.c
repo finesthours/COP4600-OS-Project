@@ -441,11 +441,5 @@ get_agent_id( char* agent_name )
 void
 Dump_evt( )
 {
-	// if debug flag is turned on
-	if( DEBUG_EVT )
-	{
-		/* print debugging message */
-	}
-	else // do not print any message
-	{ ; }
+  printf("\n%s\t%d\t%d,%d\n", Event_Names[Event], Agent, Clock.seconds, Clock.nanosec);
 }

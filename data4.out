@@ -1,0 +1,174 @@
+
+ +-----------------------------------------------------+
+ |  COP 4600                          Simulator Report |
+ |  DATE:  Fri Mar 30 14:53:49 2012                    |
+ |  NAME:  data4                                       |
+ |                                                     |
+ |  OBJECTIVE # ...........................4           |
+ |  LOGON TIME UNITS ......................mSEC        |
+ |  NO. OF TERMINALS ......................4           |
+ |  MEMORY SIZE ...........................100         |
+ |  CPU RATE ( NSEC/INSTR ) ...............500         |
+ |  SCHEDULING ALGORITHM ..................FCFS        |
+ |  MAX SCRIPT LENGTH .....................5           |
+ |                                                     |
+ |  DEBUG MEMORY ..........................OFF         |
+ |  DEBUG EVENT ...........................OFF         |
+ |  DEBUG PCB .............................OFF         |
+ |  DEBUG RBLIST ..........................OFF         |
+ |  DEBUG DEVQ ............................OFF         |
+ |  DEBUG CPUQ ............................OFF         |
+ |                                                     |
+ | =================  DEVICE TABLE =================== |
+ |                                                     |
+ |  ID      RATE (*)                                   |
+ |                                                     |
+ |  PRNT    100                                        |
+ |  DISK    300                                        |
+ |                                                     |
+ | (*) Bytes/Second                                    |
+ +-----------------------------------------------------+
+
+ EVENT  AGENT  HR:xxxxxxxx MN:xx SC:xx MS:xxx mS:xxx NS:xxx
+ -----  -----  ----------- ----- ----- ------ ------ ------
+  LOGON  U001  HR:0 MN:0 SC:0 MS:0 mS:0 NS:0
+	Script for user U001 is:
+	EDITOR EDITOR LOGOFF 
+
+        SEGMENT #0 OF PROGRAM EDITOR OF PROCESS U001
+      ACCBITS: FF  LENGTH: 9
+        MEM ADDR  OPCODE  OPERAND
+        --------  ------  -------
+               0  SIO     23
+               1  PRNT    100
+               2  SIO     32
+               3  DISK    300
+               4  WIO     0
+               5  REQ     [0,3]
+               6  SIO     15
+               7  PRNT    150
+               8  END     17
+
+		Program number 1, EDITOR, has been loaded for user U001.
+
+  LOGON  U003  HR:0 MN:0 SC:0 MS:0 mS:10 NS:0
+	Script for user U003 is:
+	PRINTER LOGOFF 
+
+        SEGMENT #0 OF PROGRAM PRINTER OF PROCESS U003
+      ACCBITS: FF  LENGTH: 5
+        MEM ADDR  OPCODE  OPERAND
+        --------  ------  -------
+               9  SIO     27
+               10  DISK    3000
+               11  SIO     15
+               12  PRNT    100
+               13  END     30
+
+		Program number 1, PRINTER, has been loaded for user U003.
+
+  LOGON  U002  HR:0 MN:0 SC:0 MS:0 mS:10 NS:0
+	Script for user U002 is:
+	EDITOR PRINTER LOGOFF 
+
+        SEGMENT #0 OF PROGRAM EDITOR OF PROCESS U002
+      ACCBITS: FF  LENGTH: 5
+        MEM ADDR  OPCODE  OPERAND
+        --------  ------  -------
+               14  SIO     10
+               15  DISK    1000
+               16  WIO     0
+               17  REQ     [0,1]
+               18  END     37
+
+		Program number 1, EDITOR, has been loaded for user U002.
+
+  SIO  U001  HR:0 MN:0 SC:0 MS:0 mS:11 NS:500
+  LOGON  U004  HR:0 MN:0 SC:0 MS:0 mS:20 NS:0
+	Script for user U004 is:
+	PRINTER PRINTER LOGOFF 
+
+        SEGMENT #0 OF PROGRAM PRINTER OF PROCESS U004
+      ACCBITS: FF  LENGTH: 7
+        MEM ADDR  OPCODE  OPERAND
+        --------  ------  -------
+               19  SIO     18
+               20  DISK    1000
+               21  WIO     5
+               22  REQ     [0,1]
+               23  SIO     12
+               24  PRNT    50
+               25  END     24
+
+		Program number 1, PRINTER, has been loaded for user U004.
+
+  SIO  U001  HR:0 MN:0 SC:0 MS:0 mS:27 NS:500
+  WIO  U001  HR:0 MN:0 SC:0 MS:0 mS:27 NS:500
+		User U001 is blocked for I/O.
+		CPU burst was 55 instructions.
+
+  SIO  U003  HR:0 MN:0 SC:0 MS:0 mS:41 NS:0
+  SIO  U003  HR:0 MN:0 SC:0 MS:0 mS:48 NS:500
+  END  U003  HR:0 MN:0 SC:0 MS:0 mS:63 NS:500
+		Program number 1, PRINTER, has ended for user U003.
+		CPU burst was 72 instructions.
+
+  SIO  U002  HR:0 MN:0 SC:0 MS:0 mS:41 NS:0
+  WIO  U002  HR:0 MN:0 SC:0 MS:0 mS:41 NS:0
+		User U002 is blocked for I/O.
+		CPU burst was 10 instructions.
+
+  SIO  U004  HR:0 MN:0 SC:0 MS:0 mS:50 NS:0
+  WIO  U004  HR:0 MN:0 SC:0 MS:0 mS:52 NS:500
+		User U004 is blocked for I/O.
+		CPU burst was 23 instructions.
+
+  EIO  PRNT  HR:0 MN:0 SC:1 MS:0 mS:11 NS:500
+  EIO  DISK  HR:0 MN:0 SC:1 MS:0 mS:27 NS:500
+  EIO  PRNT  HR:0 MN:0 SC:2 MS:0 mS:11 NS:500
+  EIO  DISK  HR:0 MN:0 SC:11 MS:0 mS:27 NS:500
+  EIO  DISK  HR:0 MN:0 SC:14 MS:333 mS:360 NS:800
+  EIO  DISK  HR:0 MN:0 SC:17 MS:666 mS:694 NS:100
+
+
+
+                              TERMINAL  SUMMARY                             
+ ============================================================================
+ TERMNL|      EXEC      |      WAIT    |    BLOCKED   |    ELAPSED   |  %EFF
+ ======|================|==============|==============|==============|=======
+ U001  |           0 SC |         0 SC |         0 SC |         0 SC | 0.00
+       |       27500 NS |         0 NS |         0 NS |         0 NS |
+ ------|----------------|--------------|--------------|--------------|-------
+ U002  |           0 SC |         0 SC |         0 SC |         0 SC | 0.00
+       |        5000 NS |     36000 NS |         0 NS |         0 NS |
+ ------|----------------|--------------|--------------|--------------|-------
+ U003  |           0 SC |         0 SC |        12 SC |         0 SC | 0.00
+       |       36000 NS |     27500 NS | 999967000 NS |         0 NS |
+ ------|----------------|--------------|--------------|--------------|-------
+ U004  |           0 SC |         0 SC |         0 SC |         0 SC | 0.00
+       |       11500 NS |     41000 NS |         0 NS |         0 NS |
+ ============================================================================
+ TOTALS|           0 SC |         0 SC |         0 SC |         0 SC |
+       |           0 NS |         0 NS |         0 NS |         0 NS |
+ ------|----------------|--------------|--------------|--------------|
+ AVERGE|           0 SC |         0 SC |         0 SC |         0 SC |
+       |           0 NS |         0 NS |         0 NS |         0 NS |
+ =====================================================================
+
+
+                                DEVICE  SUMMARY                            
+ ============================================================================
+ DEVICE|        BUSY    |      WAIT    |      IDLE    |   RESPONSE   | %UTIL
+ ======|================|==============|==============|==============|=======
+ CPU   |           0 SC |         0 SC |         0 SC |         0 SC | 0.00
+       |       80000 NS |    104500 NS |         0 NS |         0 NS |
+ ------|----------------|--------------|--------------|--------------|-------
+ PRNT  |           2 SC |         0 SC |         0 SC |         0 SC | 0.00
+       |           0 NS | 999963000 NS |         0 NS |         0 NS |
+ ------|----------------|--------------|--------------|--------------|-------
+ DISK  |          17 SC |        26 SC |         0 SC |         0 SC | 0.00
+       |   666666600 NS | 333283800 NS |         0 NS |         0 NS |
+ ============================================================================
+
+End of Benchmark Report.
+

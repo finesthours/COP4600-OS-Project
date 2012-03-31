@@ -405,8 +405,8 @@ Cpu( )
 			if(Objective >= 3)
 			{
 				//Increment total number of burst cycles for PCB
-				CPU.active_pcb->sjnburst++;
-				//~ CPU.active_pcb->sjnburst += instruction->operand.burst;
+				//~ CPU.active_pcb->sjnburst++;
+				CPU.active_pcb->sjnburst += instruction->operand.burst;
 			}
 			
 			//Calculate when I/O event will occur using current time = clock + burst time 
@@ -819,7 +819,7 @@ Display_pgm( segment_type* seg_table, int seg_num, pcb_type* pcb )
 			{
 				//Display burst count
 				print_out("     %lu\n", Mem[base].operand);
-				printf("opcode = %d\tburst = %lu\n", Mem[base].opcode, Mem[base].operand);
+				//printf("opcode = %d\tburst = %lu\n", Mem[base].opcode, Mem[base].operand);
 			}
 			
 			//Else, if REQ or JUMP instruction

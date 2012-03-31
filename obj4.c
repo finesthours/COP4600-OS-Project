@@ -1,3 +1,13 @@
+
+
+
+
+
+
+
+
+
+
 /**
 	obj4.c
 
@@ -19,6 +29,9 @@
 #include <string.h>
 #include "osdefs.h"
 #include "externs.h"
+
+void Dump_Event_List();
+void Dump_Event_List_Recursive(event_list *Event_List, int i);
 
 /**
 	Add given process to the end of the CPU ready queue.
@@ -56,19 +69,21 @@ Add_cpuq( pcb_type *pcb )
 	if(CPU.ready_q == NULL)
 	{
 		//Set ready queue to new node
-		CPU.ready_q->pcb = pcbNode->pcb;
+		CPU.ready_q = pcbNode;
 		//All links point to itself since it is circularly linked
-		CPU.ready_q->next = CPU.ready_q;
-		CPU.ready_q->prev = CPU.ready_q;
-		return;
+		pcbNode->next = pcbNode;
+		pcbNode->prev = pcbNode;
 	}
 	
 	//Otherwise, queue is non-empty
-	//Place node at end of queue
-	pcbNode->next = CPU.ready_q;
-	pcbNode->prev = CPU.ready_q->prev;
-	CPU.ready_q->prev->next = pcbNode;
-	CPU.ready_q->prev = pcbNode;
+	else
+	{
+		//Place node at end of queue
+		pcbNode->next = CPU.ready_q;
+		pcbNode->prev = CPU.ready_q->prev;
+		CPU.ready_q->prev->next = pcbNode;
+		CPU.ready_q->prev = pcbNode;
+	}
 }
 
 /**
@@ -111,22 +126,24 @@ Add_devq( int dev_id, rb_type* rb )
 	if(Dev_Table[dev_id].wait_q == NULL)
 	{
 		//Set device queue to new node
-		Dev_Table[dev_id].wait_q->rb = rbNode->rb;
+		Dev_Table[dev_id].wait_q = rbNode;
 		//All links point to itself since it is circularly linked
-		Dev_Table[dev_id].wait_q->next = Dev_Table[dev_id].wait_q;
-		Dev_Table[dev_id].wait_q->prev = Dev_Table[dev_id].wait_q;
-		return;
+		rbNode->next = rbNode;
+		rbNode->prev = rbNode;
 	}
 	
 	//Otherwise, queue is non-empty
-	//Place node at end of queue
-	rbNode->next = Dev_Table[dev_id].wait_q;
-	rbNode->prev = Dev_Table[dev_id].wait_q->prev;
-	Dev_Table[dev_id].wait_q->prev->next = rbNode;
-	Dev_Table[dev_id].wait_q->prev = rbNode;
+	else
+	{
+		//Place node at end of queue
+		rbNode->next = Dev_Table[dev_id].wait_q;
+		rbNode->prev = Dev_Table[dev_id].wait_q->prev;
+		Dev_Table[dev_id].wait_q->prev->next = rbNode;
+		Dev_Table[dev_id].wait_q->prev = rbNode;
+	}
 	
 	//Record time when rb is enqueued
-	Dev_Table[dev_id].total_q_time = Clock;
+	rb->q_time = Clock;
 }
 
 /**
@@ -166,18 +183,22 @@ Add_rblist( pcb_type* pcb, rb_type* rb)
 	if(pcb->rb_q == NULL)
 	{
 		//Set request block queue to new node
-		pcb->rb_q->rb = rbNode->rb;
+		pcb->rb_q = rbNode;
 		//All links point to itself since it is circularly linked
-		pcb->rb_q->next = pcb->rb_q;
-		pcb->rb_q->prev = pcb->rb_q;
-		return;
+		rbNode->next = rbNode;
+		rbNode->prev = rbNode;
 	}
+	
 	//Otherwise, queue is non-empty
-	//Place node at end of queue
-	rbNode->next = pcb->rb_q;
-	rbNode->prev = pcb->rb_q->prev;
-	pcb->rb_q->prev->next = rbNode;
-	pcb->rb_q->prev = rbNode;
+	else
+	{
+		//Place node at end of queue
+		rbNode->next = pcb->rb_q;
+		rbNode->prev = pcb->rb_q->prev;
+		pcb->rb_q->prev->next = rbNode;
+		pcb->rb_q->prev = rbNode;
+	}
+	rbNode->rb->q_time = Clock;
 }
 
 /**
@@ -212,27 +233,43 @@ Scheduler( )
 	//Update the number of processes serviced by the CPU
 	CPU.num_served++;
 	
+	if(CPU.ready_q == NULL) return NULL;
+
 	//Get first pcb in CPU's ready queue
 	pcb_type *pcb = (pcb_type*)malloc(sizeof(pcb_type));
 	pcb = CPU.ready_q->pcb;
 	
 	//Remove first node in queue
+	pcb_list *pcbNode = (pcb_list*)malloc(sizeof(pcb_list));
+	pcbNode = CPU.ready_q;
+	
 	//If not removing last pcb in ready queue
 	if(CPU.ready_q->next != CPU.ready_q && CPU.ready_q->prev != CPU.ready_q)
 	{
 		//Change head of ready queue
-		CPU.ready_q->prev->next = CPU.ready_q->next;
-		CPU.ready_q = CPU.ready_q->next;
+		pcbNode->prev->next = pcbNode->next;
+		pcbNode->next->prev = pcbNode->prev;
+		CPU.ready_q = pcbNode->next;
+	}
+	else
+	{
+        CPU.ready_q = NULL;
 	}
 
+	pcb->run_time = Clock;
+	
 	//Calculate time process was ready
+	time_type currTime = Clock;
+    Diff_time(&pcb->ready_time,&currTime);
+	
 	//Increment total ready time for process
-	Add_time(&Clock, &CPU.active_pcb->total_ready_time);
+	Add_time(&currTime, &pcb->total_ready_time);
+	
 	//Increment total CPU queue waiting time
-	Add_time(&Clock, &CPU.total_q_time);
+	Add_time(&currTime, &CPU.total_q_time);
 
 	//Reset the burst count for the next program
-	CPU.CPU_burst = 0;
+	pcb->sjnburst = 0;  
 	
 	//return next active process
 	return pcb;
@@ -270,15 +307,14 @@ void
 Sio_Service( )
 {
 	//Allocate and initialize new I/O request block--call Alloc_rb()
-	rb_type *rb = (rb_type*)malloc(sizeof(rb_type));
-	rb = Alloc_rb();
+	rb_type* rb = Alloc_rb();
 	
 	//Add rb to both the device's and pcb's queues--call both Add_devq() and Add_rblist()
-	Add_devq(Agent, rb);
-	Add_rblist(CPU.active_pcb, rb);
+	Add_devq(rb->dev_id, rb);
+	Add_rblist(rb->pcb, rb);
 	
 	//Initiate I/O operation on requested device--call Start_IO()
-	Start_IO(Agent);
+	Start_IO(rb->dev_id);
 	
 	//Return control to interrupted process--turn CPU switch on and scheduling switch off
 	CPU_SW = ON;
@@ -348,30 +384,31 @@ Alloc_rb( )
 	//Initialize request block's fields:
 	//Mark status as pending
 	rb->status = PENDING_RB;
+	
 	//Retrieve process that owns this rb using the current agent ID
 	rb->pcb = Term_Table[Agent-1];
 	
 	//Calculate and save the device's ID for the rb:
 	//Let saved_pc be the program counter from the pcb's saved CPU state
-	addr_type *saved_pc = (addr_type*)malloc(sizeof(addr_type));
-	saved_pc = &rb->pcb->cpu_save.pc;
+	addr_type saved_pc = rb->pcb->cpu_save.pc;
 	
 	//Let device_seg be the segment from the pcb's segment table of the last executed instruction (retrieved from saved_pc)
-	segment_type *device_seg = (segment_type*)malloc(sizeof(segment_type));
-	device_seg = &rb->pcb->seg_table[saved_pc->segment];
+	segment_type device_seg = rb->pcb->seg_table[saved_pc.segment];
 	
 	//Let device_instr be the instruction from Mem at postion device_seg.base + saved_pc.offset - 1
-	instr_type *device_instr = (instr_type*)malloc(sizeof(instr_type));
-	device_instr = &Mem[device_seg->base + saved_pc->offset - 1];
+	instr_type device_instr = Mem[device_seg.base + saved_pc.offset - 1];
 	
 	//Finally, set rb->dev_id be the opcode at device_instr converted to its corresponding device ID (i.e., opcode - NUM_OPCODES)
-	rb->dev_id = device_instr->opcode - NUM_OPCODES;
+	rb->dev_id = device_instr.opcode - NUM_OPCODES;
 	
+	rb->q_time = Clock;
+
 	//Set number of bytes to transfer
-	rb->bytes = device_instr->operand.bytes;
+	rb->bytes = device_instr.operand.bytes;
 	
 	//Save logical address (segment/offset pair) of the device instruction using process's saved PC
-	rb->req_id = *saved_pc;
+	saved_pc.offset--;
+	rb->req_id = saved_pc;
 	
 	//return new I/O request block
 	return rb;
@@ -427,7 +464,7 @@ Start_IO( int dev_id )
 {
 	
 	//If the device is busy
-	if(Dev_Table[dev_id].current_rb->status == PENDING_RB)
+        if(Dev_Table[dev_id].current_rb != NULL && Dev_Table[dev_id].current_rb->status == ACTIVE_RB)
 	{
 		//Do nothing
 		return;
@@ -440,26 +477,30 @@ Start_IO( int dev_id )
 		return;
 	}
 
+	rb_list *rbNode = Dev_Table[dev_id].wait_q;
+
 	//Get and remove first node from waiting list
-	rb_type *rb = (rb_type*)malloc(sizeof(rb_type));
-	rb = Dev_Table[dev_id].wait_q->rb;
-	
 	Dev_Table[dev_id].wait_q->prev->next = Dev_Table[dev_id].wait_q->next;
 	Dev_Table[dev_id].wait_q->next->prev = Dev_Table[dev_id].wait_q->prev;
-	Dev_Table[dev_id].wait_q = Dev_Table[dev_id].wait_q->next;
+	Dev_Table[dev_id].wait_q = rbNode->next;
+	
+	if(rbNode == Dev_Table[dev_id].wait_q)
+	{
+		Dev_Table[dev_id].wait_q = NULL;
+	}
 	
 	//Mark rb as the current request block in the device; set rb's status as active
+	Dev_Table[dev_id].current_rb = rbNode->rb;
 	Dev_Table[dev_id].current_rb->status = ACTIVE_RB;
 	
 	//Update time spent waiting in queue--calculate difference between current time and time it was enqueued and add this value to the current queue wait time--use Add_time() and Diff_time()
 	time_type currTime = Clock;
-    Diff_time(&(Dev_Table[dev_id].current_rb->q_time),&currTime);
+    Diff_time(&rbNode->rb->q_time,&currTime);
     Add_time(&currTime, &(Dev_Table[dev_id].total_q_time));
 
 	//Compute length of time that I/O will take (transfer time)--compute number of seconds and then use the remainder to calculate the number of nanoseconds
 	time_type transferTime;
     transferTime.seconds = Dev_Table[dev_id].current_rb->bytes / Dev_Table[dev_id].bytes_per_sec;
-    
     transferTime.nanosec = (Dev_Table[dev_id].current_rb->bytes % Dev_Table[dev_id].bytes_per_sec)*Dev_Table[dev_id].nano_per_byte;
 	
 	//Increment device's busy time by the transfer time--use Add_time()
@@ -537,13 +578,13 @@ void
 Wio_Service( )
 {
 	//Retrieve pcb from the terminal table that is waiting for I/O
-	pcb_type* pcb = Term_Table[Agent-1];
+	pcb_type *pcb = Term_Table[Agent-1];
 
 	//Retrieve request instruction using saved CPU information
     instr_type instr = Mem[pcb->seg_table[pcb->cpu_save.pc.segment].base + pcb->cpu_save.pc.offset-1];
 	
 	//Locate request block that process wants to wait for--call Find_rb()
-	rb_type* rb = Find_rb(pcb, &instr.operand.address);
+	rb_type *rb = Find_rb(pcb, &instr.operand.address);
 
 	//Determine status of request block
 	//If rb is still active or pending
@@ -554,14 +595,14 @@ Wio_Service( )
 		pcb->status == BLOCKED_PCB;
 
 		//Turn CPU and scheduling switches on to schedule a new process
+		CPU_SW = ON;
 		SCHED_SW = ON;
-        CPU_SW   = ON;
         
 		//Calculate active time for process and busy time for CPU
 		time_type currTime = Clock;
-        Diff_time(&pcb->run_time,&currTime);
-        Add_time(&currTime,&(pcb->total_run_time));
-        Add_time(&currTime,&(CPU.total_busy_time));
+        Diff_time(&pcb->run_time, &currTime);
+        Add_time(&currTime, &(pcb->total_run_time));
+        Add_time(&currTime, &(CPU.total_busy_time));
 
 		//Record time process was blocked
 		pcb->block_time = Clock;
@@ -570,6 +611,7 @@ Wio_Service( )
 		print_out("\t\tUser %s is blocked for I/O.\n", pcb->username);
         print_out("\t\tCPU burst was %d instructions.\n\n",pcb->sjnburst);
 	}
+	
 	//If rb has finished
 	if(rb->status == DONE_RB)
     {
@@ -578,7 +620,7 @@ Wio_Service( )
 		Delete_rb(rb, pcb);
 		
 		//Turn CPU switch on to execute a process
-		CPU_SW   = ON; 
+		CPU_SW = ON; 
 		
 		//Turn scheduling flag off to use current process (i.e., not schedule a new process)
 		SCHED_SW = OFF;
@@ -617,8 +659,6 @@ Find_rb( pcb_type* pcb, struct addr_type* req_id )
 		rbNode = rbNode->next;
 	}
 	err_quit("no rb found.\n");
-	// temporary return value
-	//~ return( NULL );
 }
 
 /**
@@ -657,25 +697,28 @@ Delete_rb( rb_type* rb, pcb_type* pcb )
 			if(rbNode == pcb->rb_q)
 			{
 				//Change head of list
-				pcb->rb_q->prev->next = pcb->rb_q->next;
+				//~ pcb->rb_q->prev->next = pcb->rb_q->next;
 				pcb->rb_q = pcb->rb_q->next;
 			}
 			//If deleting last remaining node
-			else if(rbNode->next->rb == rbNode->rb)
+			else if(rbNode == rbNode->next)
 			{
 				//Delete list
+				free(rbNode->rb);
+                free(rbNode);
 				pcb->rb_q == NULL;
+				return;
 			}
 			//Otherwise, remove node from middle of list
 			else
 			{
 				//By-pass node in list
 				rbNode->prev->next = rbNode->next;
-				rbNode = rbNode->next;
+				rbNode->next->prev = rbNode->prev;
 			}
 			//Deallocate both the list node and the request block
 			free(rbNode->rb);
-			free(rb);
+			free(rbNode);
 			return;
 		}
 		rbNode = rbNode->next;
@@ -743,13 +786,13 @@ void
 Eio_Service( )
 {
 	//Retrieve device that caused the I/O interrupt from the device table
-	device_type* device = &(Dev_Table[Agent-Num_Terminals-1]);
+	device_type *device = &(Dev_Table[Agent-Num_Terminals-1]);
 	
 	//Retrieve request block issued to device that is now complete
-	rb_type* currRB = device->current_rb;
+	rb_type *currRB = device->current_rb;
 	
 	//Retrieve process that issued the request block to the device
-	pcb_type* currPCB = currRB->pcb;
+	pcb_type *currPCB = currRB->pcb;
 	
 	//Mark that device no longer has a current request block
 	device->current_rb = NULL;
@@ -765,8 +808,8 @@ Eio_Service( )
 	if(currPCB->status == READY_PCB || currPCB->status == ACTIVE_PCB)
     {
 		//Turn off both switches
+		CPU_SW = OFF;
         SCHED_SW = OFF;
-        CPU_SW   = OFF;
     }
 		
 	//If process is blocked due to I/O
@@ -777,7 +820,7 @@ Eio_Service( )
         {
 			//The process can now run:
 			//Delete rb from pcb's waiting list--call Delete_rb()
-			Delete_rb(currRB,currPCB);
+			Delete_rb(currRB, currPCB);
 			
 			//Mark pcb as ready to run
 			currPCB->status = READY_PCB;
@@ -791,22 +834,22 @@ Eio_Service( )
 		
 		//Calculate and record time process was blocked
 		time_type currTime = Clock;
-        Diff_time(&(currPCB->block_time),&currTime);
-        Add_time(&currTime,&(currPCB->total_block_time));
+        Diff_time(&(currPCB->block_time), &currTime);
+        Add_time(&currTime, &(currPCB->total_block_time));
 
 		//If CPU is has no currently active process
 		if(CPU.active_pcb == NULL)
 		{
 			//Turn on both switches to schedule a new process to run
+			CPU_SW = ON;
 			SCHED_SW = ON;
-			CPU_SW   = ON;
         }
         //Otherwise, CPU is already busy, so
         else
         {
 			//Turn off both switches
+			CPU_SW = OFF;
 			SCHED_SW = OFF;
-			CPU_SW   = OFF;
 		}
 	}
 	
@@ -829,22 +872,22 @@ Eio_Service( )
 		
 		//Calculate and record time process was blocked
 		time_type currTime = Clock;
-        Diff_time(&(currPCB->block_time),&currTime);
-        Add_time(&currTime,&(currPCB->total_block_time));
+        Diff_time(&(currPCB->block_time), &currTime);
+        Add_time(&currTime, &(currPCB->total_block_time));
 		
 		//If CPU is idle
 		if(CPU.active_pcb == NULL)
 		{
 			//Turn on CPU and scheduling switches to run a new process
+			CPU_SW = ON;
 			SCHED_SW = ON;
-			CPU_SW   = ON;
 		}
 		//Otherwise, CPU is already busy, so
 		else
         {
 			//Turn off both switches
+			CPU_SW = OFF;
 			SCHED_SW = OFF;
-			CPU_SW   = OFF;
 		}
 	}
 }
@@ -879,40 +922,55 @@ Eio_Service( )
 void
 Purge_rb( pcb_type* pcb )
 {
-	rb_list *currNode, *prevNode;
+	rb_list *nextNode, *prevNode, *iterNode;
 	//If list is not empty
 	if(pcb->rb_q)
 	{
-		currNode = pcb->rb_q;	
 		//Traverse pcb's list of request blocks removing all finished rbs:
-		while(currNode)
+		//Start at second node in the list and end when wraps around to first
+		iterNode = pcb->rb_q->next;	
+		while(iterNode != pcb->rb_q)
 		{
+			//Save previous node and current node
+			prevNode = iterNode->prev;
+			nextNode = iterNode->next;
+			
 			//If rb is done
-			if(currNode->rb->status = DONE_RB)
+			if(iterNode->rb->status == DONE_RB)
 			{
-				//If first rb in list is done
-				if(currNode == pcb->rb_q)
-				{
-					//If deleting last remaining node
-					if(currNode->next->rb = currNode->rb)
-					{
-						//Delete list
-						pcb->rb_q == NULL;
-					}
-					//Remove node from front of list
-					//Change head of list
-					pcb->rb_q->prev->next = pcb->rb_q->next;
-					pcb->rb_q = pcb->rb_q->next;
-				}
 				//Remove node from middle of list
-				else
-				{
-					prevNode->next = currNode->next;
-					currNode = currNode->next;
-				}
+				prevNode->next = nextNode;
+                nextNode->prev = prevNode;
+                free(iterNode->rb);
+                free(iterNode);
 			}
-			prevNode = currNode;
-			currNode = currNode->next;
+			iterNode = iterNode->next;
+		}
+		
+		//Handle special removal cases:
+		//If first rb in list is done
+		if(pcb->rb_q->rb->status == DONE_RB)
+		{
+			//If deleting last remaining node
+			if(pcb->rb_q->next == pcb->rb_q)
+			{
+				//Delete list
+				free(pcb->rb_q->rb);
+                free(pcb->rb_q);
+			}
+			else
+			{
+				//Remove node from front of list
+				iterNode = pcb->rb_q;
+                iterNode->prev->next = iterNode->next;
+                iterNode->next->prev = iterNode->prev;
+				
+				//Change head of list
+				pcb->rb_q = pcb->rb_q->next;
+				
+				free(iterNode->rb);
+                free(iterNode);
+			}
 		}
 	}
 }
@@ -1054,4 +1112,22 @@ Dump_cpuq( )
 	}
 	else // do not print any message
 	{ ; }
+}
+
+void
+Dump_Event_List()
+{
+  puts("");
+  Dump_Event_List_Recursive(Event_List, 1);
+  puts("");
+}
+
+void
+Dump_Event_List_Recursive(event_list *Event_List, int i )
+{
+  if(Event_List == NULL)
+    return;
+
+  printf("[%d: %s %d, %d %d] ", i, Event_Names[Event_List->event], Event_List->agent, Event_List->time.seconds, Event_List->time.nanosec);
+  Dump_Event_List_Recursive(Event_List->next, i+1);
 }

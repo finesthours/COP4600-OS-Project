@@ -94,7 +94,7 @@ Logon_Service( )
 	if(Objective >= 4)
 	{
 		//If no process is active in the CPU currently
-		if(CPU.active_pcb == NULL)
+		if(CPU.active_pcb != NULL)
 		{
 			//Turn off scheduling and CPU switches
 			SCHED_SW = OFF;
