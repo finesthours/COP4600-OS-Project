@@ -1,13 +1,3 @@
-
-
-
-
-
-
-
-
-
-
 /**
 	obj4.c
 
@@ -236,20 +226,21 @@ Scheduler( )
 	if(CPU.ready_q == NULL) return NULL;
 
 	//Get first pcb in CPU's ready queue
-	pcb_type *pcb = (pcb_type*)malloc(sizeof(pcb_type));
-	pcb = CPU.ready_q->pcb;
+	pcb_list *pcbNode = CPU.ready_q;
+	pcb_type *pcb = pcbNode->pcb;
 	
 	//Remove first node in queue
-	pcb_list *pcbNode = (pcb_list*)malloc(sizeof(pcb_list));
-	pcbNode = CPU.ready_q;
+	CPU.ready_q = CPU.ready_q->next;
 	
 	//If not removing last pcb in ready queue
-	if(CPU.ready_q->next != CPU.ready_q && CPU.ready_q->prev != CPU.ready_q)
+	if(pcbNode != CPU.ready_q)
 	{
 		//Change head of ready queue
-		pcbNode->prev->next = pcbNode->next;
-		pcbNode->next->prev = pcbNode->prev;
-		CPU.ready_q = pcbNode->next;
+		CPU.ready_q->prev->prev->next = CPU.ready_q;
+		CPU.ready_q->prev = CPU.ready_q->prev->prev;
+		//~ pcbNode->prev->next = pcbNode->next;
+		//~ pcbNode->next->prev = pcbNode->prev;
+		//~ CPU.ready_q = pcbNode->next;
 	}
 	else
 	{
@@ -260,7 +251,7 @@ Scheduler( )
 	
 	//Calculate time process was ready
 	time_type currTime = Clock;
-    Diff_time(&pcb->ready_time,&currTime);
+    Diff_time(&pcb->ready_time, &currTime);
 	
 	//Increment total ready time for process
 	Add_time(&currTime, &pcb->total_ready_time);
@@ -400,8 +391,6 @@ Alloc_rb( )
 	
 	//Finally, set rb->dev_id be the opcode at device_instr converted to its corresponding device ID (i.e., opcode - NUM_OPCODES)
 	rb->dev_id = device_instr.opcode - NUM_OPCODES;
-	
-	rb->q_time = Clock;
 
 	//Set number of bytes to transfer
 	rb->bytes = device_instr.operand.bytes;
@@ -409,6 +398,8 @@ Alloc_rb( )
 	//Save logical address (segment/offset pair) of the device instruction using process's saved PC
 	saved_pc.offset--;
 	rb->req_id = saved_pc;
+	
+	rb->q_time = Clock;
 	
 	//return new I/O request block
 	return rb;
@@ -464,7 +455,7 @@ Start_IO( int dev_id )
 {
 	
 	//If the device is busy
-        if(Dev_Table[dev_id].current_rb != NULL && Dev_Table[dev_id].current_rb->status == ACTIVE_RB)
+    if(Dev_Table[dev_id].current_rb != NULL && Dev_Table[dev_id].current_rb->status == ACTIVE_RB)
 	{
 		//Do nothing
 		return;
@@ -489,19 +480,22 @@ Start_IO( int dev_id )
 		Dev_Table[dev_id].wait_q = NULL;
 	}
 	
+	rbNode->next = rbNode;
+	rbNode->prev = rbNode;
+	
 	//Mark rb as the current request block in the device; set rb's status as active
 	Dev_Table[dev_id].current_rb = rbNode->rb;
-	Dev_Table[dev_id].current_rb->status = ACTIVE_RB;
+	rbNode->rb->status = ACTIVE_RB;
 	
 	//Update time spent waiting in queue--calculate difference between current time and time it was enqueued and add this value to the current queue wait time--use Add_time() and Diff_time()
 	time_type currTime = Clock;
-    Diff_time(&rbNode->rb->q_time,&currTime);
-    Add_time(&currTime, &(Dev_Table[dev_id].total_q_time));
+    Diff_time(&rbNode->rb->q_time, &currTime);
+    Add_time(&currTime, &Dev_Table[dev_id].total_q_time);
 
 	//Compute length of time that I/O will take (transfer time)--compute number of seconds and then use the remainder to calculate the number of nanoseconds
 	time_type transferTime;
-    transferTime.seconds = Dev_Table[dev_id].current_rb->bytes / Dev_Table[dev_id].bytes_per_sec;
-    transferTime.nanosec = (Dev_Table[dev_id].current_rb->bytes % Dev_Table[dev_id].bytes_per_sec)*Dev_Table[dev_id].nano_per_byte;
+    transferTime.seconds = rbNode->rb->bytes / Dev_Table[dev_id].bytes_per_sec;
+    transferTime.nanosec = (rbNode->rb->bytes % Dev_Table[dev_id].bytes_per_sec)*Dev_Table[dev_id].nano_per_byte;
 	
 	//Increment device's busy time by the transfer time--use Add_time()
 	Add_time(&transferTime, &Dev_Table[dev_id].total_busy_time);
@@ -578,10 +572,12 @@ void
 Wio_Service( )
 {
 	//Retrieve pcb from the terminal table that is waiting for I/O
-	pcb_type *pcb = Term_Table[Agent-1];
-
+	//~ pcb_type *pcb = Term_Table[Agent-1];
+	pcb_type *pcb = Term_Table[Agent - 1]->rb_q->rb->pcb;
+	
 	//Retrieve request instruction using saved CPU information
-    instr_type instr = Mem[pcb->seg_table[pcb->cpu_save.pc.segment].base + pcb->cpu_save.pc.offset-1];
+    //~ instr_type instr = Mem[pcb->seg_table[pcb->cpu_save.pc.segment].base + pcb->cpu_save.pc.offset-1];
+    instr_type instr = Mem[pcb->seg_table[pcb->cpu_save.pc.segment].base + CPU.state.pc.offset-1];
 	
 	//Locate request block that process wants to wait for--call Find_rb()
 	rb_type *rb = Find_rb(pcb, &instr.operand.address);
@@ -606,6 +602,8 @@ Wio_Service( )
 
 		//Record time process was blocked
 		pcb->block_time = Clock;
+		
+		pcb->wait_rb = rb;
 
 		//Print output message giving blocked procese and burst count
 		print_out("\t\tUser %s is blocked for I/O.\n", pcb->username);
@@ -648,7 +646,7 @@ Find_rb( pcb_type* pcb, struct addr_type* req_id )
 	rb_list *rbNode = pcb->rb_q;
 
 	//Traverse the pcb's request block list 
-	while(rbNode)
+	do
 	{
 		//If the rb's request address matches the given requested address
 		if(rbNode->rb->req_id.segment == req_id->segment && rbNode->rb->req_id.offset == req_id->offset)
@@ -657,7 +655,7 @@ Find_rb( pcb_type* pcb, struct addr_type* req_id )
 			return rbNode->rb;
 		}
 		rbNode = rbNode->next;
-	}
+	}while(rbNode != pcb->rb_q);
 	err_quit("no rb found.\n");
 }
 
@@ -825,6 +823,8 @@ Eio_Service( )
 			//Mark pcb as ready to run
 			currPCB->status = READY_PCB;
 			
+			currPCB->wait_rb = NULL;
+			
 			//Add pcb to CPU's ready queue--call Add_cpuq()
 			Add_cpuq(currPCB);
 		}
@@ -955,8 +955,9 @@ Purge_rb( pcb_type* pcb )
 			if(pcb->rb_q->next == pcb->rb_q)
 			{
 				//Delete list
-				free(pcb->rb_q->rb);
-                free(pcb->rb_q);
+				//~ free(pcb->rb_q->rb);
+                //~ free(pcb->rb_q);
+                pcb->rb_q = NULL;
 			}
 			else
 			{
