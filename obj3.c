@@ -1,3 +1,4 @@
+
 /**
 	obj3.c
 
@@ -842,7 +843,8 @@ Merge_seg( seg_list* prev_seg, seg_list* new_seg, seg_list* next_seg )
 void
 End_Service( )
 {
-	time_type *activeTime = &Clock;
+  time_type *activeTime = (time_type*)malloc(sizeof(time_type)); 
+	  *activeTime = Clock;
 	//Retrieve PCB associated with program from terminal table
 	pcb_type *PCB;
 	PCB = Term_Table[Agent-1];

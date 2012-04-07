@@ -1,3 +1,8 @@
+
+
+
+
+
 /**
 	obj4.c
 
@@ -588,7 +593,7 @@ Wio_Service( )
     {
 		//Block process since I/O not finished:
 		//Mark PCB as blocked; mark it 
-		pcb->status == BLOCKED_PCB;
+		pcb->status = BLOCKED_PCB;
 
 		//Turn CPU and scheduling switches on to schedule a new process
 		CPU_SW = ON;
@@ -683,42 +688,42 @@ Find_rb( pcb_type* pcb, struct addr_type* req_id )
 void
 Delete_rb( rb_type* rb, pcb_type* pcb )
 {
-	rb_list *rbNode = pcb->rb_q;
-
-	//Traverse the pcb's request block list 
-	while(rbNode)
+  rb_list *rbNode = pcb->rb_q;
+  
+  //Traverse the pcb's request block list 
+  while(rbNode)
+    {
+      //If the rb has been found
+      if(rbNode->rb->req_id.segment == rb->req_id.segment && rbNode->rb->req_id.offset == rb->req_id.offset)
 	{
-		//If the rb has been found
-		if(rbNode->rb->req_id.segment == rb->req_id.segment && rbNode->rb->req_id.offset == rb->req_id.offset)
-		{
-			//If deleting front of queue
-			if(rbNode == pcb->rb_q)
-			{
-				//Change head of list
-				//~ pcb->rb_q->prev->next = pcb->rb_q->next;
-				pcb->rb_q = pcb->rb_q->next;
-			}
-			//If deleting last remaining node
-			else if(rbNode == rbNode->next)
-			{
-				//Delete list
-				free(rbNode->rb);
-                free(rbNode);
-				pcb->rb_q == NULL;
-				return;
-			}
-			//Otherwise, remove node from middle of list
-			else
-			{
-				//By-pass node in list
-				rbNode->prev->next = rbNode->next;
-				rbNode->next->prev = rbNode->prev;
-			}
-			//Deallocate both the list node and the request block
-			free(rbNode->rb);
-			free(rbNode);
-			return;
-		}
+	  //If deleting front of queue
+	  if(rbNode == rbNode->next)
+	    {
+	      //Delete list
+	      free(rbNode->rb);
+	      free(rbNode);
+	      pcb->rb_q = NULL;
+	      return;
+	    }
+	  //If deleting last remaining node
+	  else if(rbNode == pcb->rb_q)
+	    {
+	      //Change head of list
+	      //~ pcb->rb_q->prev->next = pcb->rb_q->next;
+	      pcb->rb_q = pcb->rb_q->next;
+	    }
+	  //Otherwise, remove node from middle of list
+	  else
+	    {
+	      //By-pass node in list
+	      rbNode->prev->next = rbNode->next;
+	      rbNode->next->prev = rbNode->prev;
+	    }
+	  //Deallocate both the list node and the request block
+	  free(rbNode->rb);
+	  free(rbNode);
+	  return;
+	}
 		rbNode = rbNode->next;
 	}
 }
@@ -783,113 +788,113 @@ Delete_rb( rb_type* rb, pcb_type* pcb )
 void
 Eio_Service( )
 {
-	//Retrieve device that caused the I/O interrupt from the device table
-	device_type *device = &(Dev_Table[Agent-Num_Terminals-1]);
-	
-	//Retrieve request block issued to device that is now complete
-	rb_type *currRB = device->current_rb;
-	
-	//Retrieve process that issued the request block to the device
-	pcb_type *currPCB = currRB->pcb;
-	
-	//Mark that device no longer has a current request block
-	device->current_rb = NULL;
-	
-	//Mark rb's status as done
-	currRB->status = DONE_RB;
-	
-	//Service next I/O request block for this device--call Start_IO()
-	Start_IO(Agent - Num_Terminals - 1);
-	
-	//Determine current status of process
-	//If process is ready to be ran or is already running
-	if(currPCB->status == READY_PCB || currPCB->status == ACTIVE_PCB)
+  //Retrieve device that caused the I/O interrupt from the device table
+  device_type *device = &(Dev_Table[Agent-Num_Terminals-1]);
+  
+  //Retrieve request block issued to device that is now complete
+  rb_type *currRB = device->current_rb;
+  
+  //Retrieve process that issued the request block to the device
+  pcb_type *currPCB = currRB->pcb;
+  
+  //Mark that device no longer has a current request block
+  device->current_rb = NULL;
+  
+  //Mark rb's status as done
+  currRB->status = DONE_RB;
+  
+  //Service next I/O request block for this device--call Start_IO()
+  Start_IO(Agent - Num_Terminals - 1);
+  
+  //Determine current status of process
+  //If process is ready to be ran or is already running
+  if(currPCB->status == READY_PCB || currPCB->status == ACTIVE_PCB)
     {
-		//Turn off both switches
-		CPU_SW = OFF;
-        SCHED_SW = OFF;
+      //Turn off both switches
+      CPU_SW = OFF;
+      SCHED_SW = OFF;
     }
-		
+  
 	//If process is blocked due to I/O
-	else if(currPCB->status == BLOCKED_PCB)
+  else if(currPCB->status == BLOCKED_PCB)
     {
-		//If process was waiting on this rb 
-		if(currPCB->wait_rb == currRB)
+      //If process was waiting on this rb 
+      if(currPCB->wait_rb == currRB)
         {
-			//The process can now run:
-			//Delete rb from pcb's waiting list--call Delete_rb()
-			Delete_rb(currRB, currPCB);
-			
-			//Mark pcb as ready to run
-			currPCB->status = READY_PCB;
-			
-			currPCB->wait_rb = NULL;
-			
-			//Add pcb to CPU's ready queue--call Add_cpuq()
+	  //The process can now run:
+	  //Delete rb from pcb's waiting list--call Delete_rb()
+	  Delete_rb(currRB, currPCB);
+	  
+	  //Mark pcb as ready to run
+	  currPCB->status = READY_PCB;
+	  
+	  currPCB->wait_rb = NULL;
+	  
+	  //Add pcb to CPU's ready queue--call Add_cpuq()
 			Add_cpuq(currPCB);
-		}
-
-		//Record time process became ready
-		currPCB->ready_time = Clock;
-		
-		//Calculate and record time process was blocked
-		time_type currTime = Clock;
-        Diff_time(&(currPCB->block_time), &currTime);
-        Add_time(&currTime, &(currPCB->total_block_time));
-
-		//If CPU is has no currently active process
-		if(CPU.active_pcb == NULL)
-		{
-			//Turn on both switches to schedule a new process to run
+	}
+      
+      //Record time process became ready
+      currPCB->ready_time = Clock;
+      
+      //Calculate and record time process was blocked
+      time_type currTime = Clock;
+      Diff_time(&(currPCB->block_time), &currTime);
+      Add_time(&currTime, &(currPCB->total_block_time));
+      
+      //If CPU is has no currently active process
+      if(CPU.active_pcb == NULL)
+	{
+	  //Turn on both switches to schedule a new process to run
 			CPU_SW = ON;
 			SCHED_SW = ON;
         }
-        //Otherwise, CPU is already busy, so
-        else
+      //Otherwise, CPU is already busy, so
+      else
         {
-			//Turn off both switches
-			CPU_SW = OFF;
-			SCHED_SW = OFF;
-		}
+	  //Turn off both switches
+	  CPU_SW = OFF;
+	  SCHED_SW = OFF;
 	}
+    }
 	
-	//If the process is done, but only waiting for I/O to complete.
-	if(currPCB->status == DONE_PCB)
+  //If the process is done, but only waiting for I/O to complete.
+  if(currPCB->status == DONE_PCB)
     {
-		//Delete rb from pcb's waiting list--call Delete_rb()
-		Delete_rb(currRB,currPCB);
-
-		//Load next program for pcb--call Next_pgm()
-		//If one was available
-		if(Next_pgm(currPCB) != 0)
-        {
-			//Mark pcb's status as ready to run
-            currPCB->status == READY_PCB;
-        }
-
-		//Record time process became ready
-		currPCB->ready_time = Clock;
-		
-		//Calculate and record time process was blocked
-		time_type currTime = Clock;
-        Diff_time(&(currPCB->block_time), &currTime);
-        Add_time(&currTime, &(currPCB->total_block_time));
-		
-		//If CPU is idle
-		if(CPU.active_pcb == NULL)
-		{
-			//Turn on CPU and scheduling switches to run a new process
-			CPU_SW = ON;
-			SCHED_SW = ON;
-		}
-		//Otherwise, CPU is already busy, so
-		else
-        {
-			//Turn off both switches
-			CPU_SW = OFF;
-			SCHED_SW = OFF;
-		}
+      //Delete rb from pcb's waiting list--call Delete_rb()
+      Delete_rb(currRB,currPCB);
+      
+      //Load next program for pcb--call Next_pgm()
+      //If one was available
+      if(Next_pgm(currPCB) != 0)
+	{
+	  //Mark pcb's status as ready to run
+	  currPCB->status == READY_PCB;
 	}
+      
+      //Record time process became ready
+      currPCB->ready_time = Clock;
+      
+      //Calculate and record time process was blocked
+      time_type currTime = Clock;
+      Diff_time(&(currPCB->block_time), &currTime);
+      Add_time(&currTime, &(currPCB->total_block_time));
+      
+	//If CPU is idle
+      if(CPU.active_pcb == NULL)
+	{
+	  //Turn on CPU and scheduling switches to run a new process
+	    CPU_SW = ON;
+	    SCHED_SW = ON;
+	}
+      //Otherwise, CPU is already busy, so
+	else
+	  {
+	    //Turn off both switches
+	    CPU_SW = OFF;
+	    SCHED_SW = OFF;
+	  }
+    }
 }
 
 /**
