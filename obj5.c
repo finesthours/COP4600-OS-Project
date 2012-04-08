@@ -49,4 +49,67 @@
 void
 Calc_Stats( )
 {
+	int i;
+	time_type runTime, devResponseTime, cpuResponseTime;
+	
+	//For each user
+	for(i = 0; i < Num_Terminals; i++)
+	{
+		//Calculate total processing time
+		Add_time(&Term_Table[i]->total_logon_time, &Tot_Logon);
+		
+		//Calculate total job blocked time
+		Add_time(&Term_Table[i]->total_block_time,&Tot_Block);
+		
+		//Calculate total job wait time
+		Add_time(&Term_Table[i]->total_ready_time, &Tot_Wait);
+
+		//Calculate total job execution time
+		Add_time(&Term_Table[i]->total_run_time, &Tot_Run);
+		
+		//Calculate efficiency for each process
+		runTime = Term_Table[i]->total_run_time;
+		Add_time(&Term_Table[i]->total_block_time, &runTime);
+		Term_Table[i]->efficiency = 100.0 * Divide_time(&runTime, &Term_Table[i]->total_logon_time);
+	}
+	
+	//For each device
+	for(i = 0; i < Num_Devices; i++)
+	{
+		//Calculate response time for each device
+		devResponseTime = Dev_Table[i].total_q_time;
+        Add_time(&Dev_Table[i].total_busy_time, &devResponseTime);
+        Average_time(&devResponseTime, Dev_Table[i].num_served, &Dev_Table[i].response); 
+
+		//Calculate total idle time for each device
+		Dev_Table[i].total_idle_time = Clock;
+		Diff_time(&Dev_Table[i].total_busy_time, &Dev_Table[i].total_idle_time);
+		
+		//Calculate utilization for each device
+        Dev_Table[i].utilize = 100 * Divide_time(&Dev_Table[i].total_busy_time, &Clock);
+	}
+	
+	//Calculate average user execution time
+	Average_time(&Tot_Run, Num_Terminals, &Avg_Run);
+
+	//Calculate average user logon time
+	Average_time(&Tot_Logon, Num_Terminals, &Avg_Logon);
+
+	//Calculate average user blocked time
+	Average_time(&Tot_Block, Num_Terminals, &Avg_Block);
+
+	//Calculate average user wait time
+	Average_time(&Tot_Wait, Num_Terminals, &Avg_Wait);
+
+	//Calculate response time for CPU
+	cpuResponseTime = CPU.total_q_time;
+	Add_time(&CPU.total_busy_time, &cpuResponseTime);
+	Average_time(&cpuResponseTime, CPU.num_served, &CPU.response);
+
+	//Calculate total idle time for CPU
+	CPU.total_idle_time = Clock;
+	Diff_time(&CPU.total_busy_time, &CPU.total_idle_time);
+
+	//Calculate total utilization for CPU
+	CPU.utilize = 100.0 * Divide_time(&CPU.total_busy_time, &Clock);
 }

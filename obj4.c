@@ -691,8 +691,10 @@ Delete_rb( rb_type* rb, pcb_type* pcb )
   rb_list *rbNode = pcb->rb_q;
   
   //Traverse the pcb's request block list 
+  /*
   while(rbNode)
     {
+      
       //If the rb has been found
       if(rbNode->rb->req_id.segment == rb->req_id.segment && rbNode->rb->req_id.offset == rb->req_id.offset)
 	{
@@ -726,6 +728,35 @@ Delete_rb( rb_type* rb, pcb_type* pcb )
 	}
 		rbNode = rbNode->next;
 	}
+      */
+
+
+      struct rb_list *i = pcb->rb_q;
+      
+      while (i->rb != rb)
+	i = i->next;
+      
+      if (i->rb->req_id.segment == rb->req_id.segment && i->rb->req_id.offset == rb->req_id.offset)
+	{
+	  if (i == i->next)
+	    {
+	      free(i->rb);
+	      free(i);
+	      pcb->rb_q = NULL;
+	      return;
+	    }
+
+	  if (rb == pcb->rb_q->rb)
+	    pcb->rb_q = pcb->rb_q->next;
+
+	  struct rb_list *del_node = i;
+	  i->next->prev = del_node->prev;
+	  i->prev->next = del_node->next;
+
+	  free(del_node->rb);
+	  free(del_node);
+	}
+    
 }
 
 /**
@@ -926,59 +957,35 @@ Eio_Service( )
  */
 void
 Purge_rb( pcb_type* pcb )
-{
-	rb_list *nextNode, *prevNode, *iterNode;
-	//If list is not empty
-	if(pcb->rb_q)
+{	
+	struct rb_list *i = pcb->rb_q;
+  if (i == NULL)
+    return;
+
+  do
+    {
+      if (i->rb->status == DONE_RB)
 	{
-		//Traverse pcb's list of request blocks removing all finished rbs:
-		//Start at second node in the list and end when wraps around to first
-		iterNode = pcb->rb_q->next;	
-		while(iterNode != pcb->rb_q)
-		{
-			//Save previous node and current node
-			prevNode = iterNode->prev;
-			nextNode = iterNode->next;
-			
-			//If rb is done
-			if(iterNode->rb->status == DONE_RB)
-			{
-				//Remove node from middle of list
-				prevNode->next = nextNode;
-                nextNode->prev = prevNode;
-                free(iterNode->rb);
-                free(iterNode);
-			}
-			iterNode = iterNode->next;
-		}
-		
-		//Handle special removal cases:
-		//If first rb in list is done
-		if(pcb->rb_q->rb->status == DONE_RB)
-		{
-			//If deleting last remaining node
-			if(pcb->rb_q->next == pcb->rb_q)
-			{
-				//Delete list
-				//~ free(pcb->rb_q->rb);
-                //~ free(pcb->rb_q);
-                pcb->rb_q = NULL;
-			}
-			else
-			{
-				//Remove node from front of list
-				iterNode = pcb->rb_q;
-                iterNode->prev->next = iterNode->next;
-                iterNode->next->prev = iterNode->prev;
-				
-				//Change head of list
-				pcb->rb_q = pcb->rb_q->next;
-				
-				free(iterNode->rb);
-                free(iterNode);
-			}
-		}
+	  struct rb_list *del_node = i;
+	  i = i->next;
+	  if (del_node == pcb->rb_q)
+	    pcb->rb_q = i;
+
+	  del_node->prev->next = del_node->next;
+	  del_node->next->prev = del_node->prev;
+
+	  if (del_node == del_node->next)
+	    {
+	      pcb->rb_q = NULL;
+	      i = NULL;
+	    }
+
+	  free(del_node->rb);
+	  free(del_node);
 	}
+      else
+	i = i->next;
+    }while(i != pcb->rb_q);
 }
 
 /**

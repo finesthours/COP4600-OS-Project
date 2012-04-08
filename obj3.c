@@ -843,8 +843,6 @@ Merge_seg( seg_list* prev_seg, seg_list* new_seg, seg_list* next_seg )
 void
 End_Service( )
 {
-  time_type *activeTime = (time_type*)malloc(sizeof(time_type)); 
-	  *activeTime = Clock;
 	//Retrieve PCB associated with program from terminal table
 	pcb_type *PCB;
 	PCB = Term_Table[Agent-1];
@@ -852,17 +850,20 @@ End_Service( )
 	//Mark pcb as done
 	PCB->status = DONE_PCB;
 	
-	print_out("\t\tProgram number %d, %s, has ended for user %s.\n", PCB->current_prog, Prog_Names[PCB->script[PCB->current_prog-1]], PCB->username);
-    print_out("\t\tCPU burst was %u instructions.\n\n",PCB->sjnburst);
-	
 	//Remove PCB from CPU's active process
 	CPU.active_pcb = NULL;
+	
+	time_type *activeTime;
+	*activeTime = Clock; 
 	
 	//Calculate active time for process and busy time for CPU
     Diff_time(&(PCB->run_time), activeTime);
     Add_time(activeTime, &(PCB->total_run_time));
     Add_time(activeTime, &(CPU.total_busy_time));
-    
+	
+	print_out("\t\tProgram number %d, %s, has ended for user %s.\n", PCB->current_prog, Prog_Names[PCB->script[PCB->current_prog-1]], PCB->username);
+    print_out("\t\tCPU burst was %u instructions.\n\n",PCB->sjnburst);
+	
 	//Record time process became blocked
 	PCB->block_time = Clock;
 	
@@ -871,9 +872,6 @@ End_Service( )
 	{
 		//Deallocate all I/O request blocks associated with PCB--call Purge_rb()
 		Purge_rb(PCB);
-		//Turn both the scheduling and CPU switches on in order to retrieve the next process to run
-		SCHED_SW = ON;
-        CPU_SW = ON;
 	}
 
 	//If the PCB has no outstanding I/O request blocks
@@ -881,6 +879,14 @@ End_Service( )
 	{
 		//Load the next program for the user--call Next_pgm()
 		Next_pgm(PCB);
+	}
+	
+	//If objective 4 or higher
+	if(Objective >= 4)
+	{
+		//Turn both the scheduling and CPU switches on in order to retrieve the next process to run
+		SCHED_SW = ON;
+        CPU_SW = ON;
 	}
 }
 
